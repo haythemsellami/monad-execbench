@@ -3,11 +3,14 @@
 #include <category/vm/runtime/types.hpp>
 #include <category/vm/vm.hpp>
 
+#include <ethash/keccak.hpp>
+
 #include <evmc/evmc.h>
 #include <evmc/mocked_host.hpp>
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cstdint>
 #include <iomanip>
 #include <iostream>
@@ -22,11 +25,10 @@ namespace
 
     void print_usage(std::ostream &output)
     {
-        output
-            << "Usage:\n"
-            << "  monad-execbench --help\n"
-            << "  monad-execbench --version\n"
-            << "  monad-execbench smoke [--execution-env MONAD_TEN]\n";
+        output << "Usage:\n"
+               << "  monad-execbench --help\n"
+               << "  monad-execbench --version\n"
+               << "  monad-execbench smoke [--execution-env MONAD_TEN]\n";
     }
 
     std::string to_hex(std::uint8_t const *data, std::size_t const size)
@@ -53,7 +55,8 @@ namespace
         message.kind = EVMC_CALL;
         message.gas = smoke_gas_limit;
 
-        monad::bytes32_t const code_hash{1};
+        auto const code_hash = std::bit_cast<monad::bytes32_t>(
+            ethash::keccak256(bytecode.data(), bytecode.size()));
         auto const varcode = vm.try_insert_varcode_raw(code_hash, code);
         auto runtime_context = monad::vm::runtime::Context::from(
             &host.get_interface(), host.to_context(), &message, code);
@@ -64,14 +67,14 @@ namespace
         bool const valid_output =
             result.output_size == 32 && result.output_data != nullptr &&
             std::all_of(
-                result.output_data, result.output_data + 31,
+                result.output_data,
+                result.output_data + 31,
                 [](std::uint8_t const byte) { return byte == 0; }) &&
             result.output_data[31] == 0x2a;
 
         if (result.status_code != EVMC_SUCCESS || !valid_output) {
             std::cerr << "MONAD_TEN smoke execution failed"
-                      << "\nstatus=" << result.status_code
-                      << "\noutput="
+                      << "\nstatus=" << result.status_code << "\noutput="
                       << to_hex(result.output_data, result.output_size) << '\n';
             return 1;
         }
