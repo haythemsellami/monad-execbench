@@ -3,7 +3,6 @@
 #include <category/vm/runtime/types.hpp>
 #include <category/vm/vm.hpp>
 
-#include <CLI/CLI.hpp>
 #include <evmc/evmc.h>
 #include <evmc/mocked_host.hpp>
 
@@ -15,10 +14,20 @@
 #include <span>
 #include <sstream>
 #include <string>
+#include <string_view>
 
 namespace
 {
     constexpr std::int64_t smoke_gas_limit = 1'000'000;
+
+    void print_usage(std::ostream &output)
+    {
+        output
+            << "Usage:\n"
+            << "  monad-execbench --help\n"
+            << "  monad-execbench --version\n"
+            << "  monad-execbench smoke [--execution-env MONAD_TEN]\n";
+    }
 
     std::string to_hex(std::uint8_t const *data, std::size_t const size)
     {
@@ -80,34 +89,44 @@ namespace
 
 int main(int argc, char **argv)
 {
-    CLI::App app{
-        "Replay and benchmark arbitrary EVM calls with Monad execution",
-        "monad-execbench"};
-    app.set_version_flag(
-        "--version",
-        std::string{MONAD_EXECBENCH_VERSION} + " (Monad " +
-            MONAD_EXECBENCH_MONAD_COMMIT + ")");
-
-    std::string execution_env{"MONAD_TEN"};
-    auto *const smoke = app.add_subcommand(
-        "smoke", "Run a production Monad VM integration smoke test");
-    smoke->add_option(
-             "--execution-env", execution_env,
-             "Monad execution environment")
-        ->capture_default_str();
-
-    app.require_subcommand(0, 1);
-    CLI11_PARSE(app, argc, argv);
-
-    if (*smoke) {
-        if (execution_env != "MONAD_TEN") {
-            std::cerr << "unsupported execution environment: "
-                      << execution_env << '\n';
-            return 2;
-        }
-        return run_monad_ten_smoke();
+    if (argc == 1 || std::string_view{argv[1]} == "--help" ||
+        std::string_view{argv[1]} == "-h") {
+        print_usage(std::cout);
+        return 0;
     }
 
-    std::cout << app.help();
-    return 0;
+    if (std::string_view{argv[1]} == "--version") {
+        std::cout << MONAD_EXECBENCH_VERSION << " (Monad "
+                  << MONAD_EXECBENCH_MONAD_COMMIT << ")\n";
+        return 0;
+    }
+
+    if (std::string_view{argv[1]} != "smoke") {
+        std::cerr << "unknown command: " << argv[1] << '\n';
+        print_usage(std::cerr);
+        return 2;
+    }
+
+    std::string_view execution_env{"MONAD_TEN"};
+    for (int i = 2; i < argc; ++i) {
+        std::string_view const argument{argv[i]};
+        if (argument == "--help" || argument == "-h") {
+            print_usage(std::cout);
+            return 0;
+        }
+        if (argument != "--execution-env" || i + 1 >= argc) {
+            std::cerr << "invalid smoke argument: " << argument << '\n';
+            print_usage(std::cerr);
+            return 2;
+        }
+        execution_env = argv[++i];
+    }
+
+    if (execution_env != "MONAD_TEN") {
+        std::cerr << "unsupported execution environment: " << execution_env
+                  << '\n';
+        return 2;
+    }
+
+    return run_monad_ten_smoke();
 }

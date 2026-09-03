@@ -46,8 +46,7 @@ target_compile_definitions(
           MONAD_EXECBENCH_MONAD_COMMIT="${MONAD_EXECBENCH_MONAD_COMMIT}")
 target_link_libraries(
   monad-execbench
-  PRIVATE CLI11::CLI11
-          evmc::mocked_host
+  PRIVATE evmc::mocked_host
           monad_execution)
 
 include(CTest)
@@ -59,4 +58,3 @@ if(BUILD_TESTING)
 endif()
 
 install(TARGETS monad-execbench RUNTIME DESTINATION bin)
-
