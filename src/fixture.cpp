@@ -418,14 +418,12 @@ namespace monad_execbench
                 .storage =
                     storage(account.at("storage"), account_path + ".storage")};
             parsed.code_hash = monad::to_bytes(monad::keccak256(parsed.code));
-            if (account.contains("codeHash")) {
-                auto const declared = fixed_hex<monad::bytes32_t>(
-                    account.at("codeHash"), account_path + ".codeHash");
-                if (declared != parsed.code_hash) {
-                    invalid(
-                        account_path + ".codeHash",
-                        "does not match runtime code");
-                }
+            auto const declared = fixed_hex<monad::bytes32_t>(
+                account.at("codeHash"), account_path + ".codeHash");
+            if (declared != parsed.code_hash) {
+                invalid(
+                    account_path + ".codeHash",
+                    "does not match runtime code");
             }
             suite.accounts.push_back(std::move(parsed));
         }

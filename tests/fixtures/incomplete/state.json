@@ -4,12 +4,14 @@
       "balance": "1000000000000000000",
       "nonce": "0",
       "code": "0x",
+      "codeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
       "storage": {}
     },
     "0x2000000000000000000000000000000000000004": {
       "balance": "0",
       "nonce": "1",
       "code": "0x60015460005260206000f3",
+      "codeHash": "0x98ad3660b57cc327f74bd024b5b409dc9a1ccd0eadbc69f6e703a5b3db7bbf9d",
       "storage": {}
     }
   },

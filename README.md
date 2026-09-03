@@ -44,11 +44,27 @@ cmake --build build --target monad-execbench --parallel
 ctest --test-dir build --output-on-failure -R monad-execbench
 ```
 
-The first milestone provides a VM smoke test:
+Run the VM smoke test:
 
 ```bash
 ./build/monad-execbench smoke --execution-env MONAD_TEN
 ```
+
+Verify a portable fixture suite offline:
+
+```bash
+./build/monad-execbench verify path/to/fixture-suite
+```
+
+Verification loads the captured state into Monad's page-encoded in-memory
+database, executes every case with both `InterpreterOnly` and production
+`Dual` VM modes, and requires matching status, output, execution gas, logs,
+and selected post-state. An account, runtime code, storage slot, or block hash
+read that was not captured makes verification fail.
+
+The bundle schema is documented in
+[docs/fixture-format.md](docs/fixture-format.md). Fixture capture and timed
+benchmarking are planned follow-up milestones.
 
 ## License
 
