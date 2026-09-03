@@ -13,7 +13,8 @@ if(result EQUAL 0)
 endif()
 
 set(combined_output "${standard_output}${standard_error}")
-if(NOT combined_output MATCHES "${EXPECTED}")
+string(FIND "${combined_output}" "${EXPECTED}" expected_position)
+if(expected_position EQUAL -1)
   message(
     FATAL_ERROR
       "command failed without expected output '${EXPECTED}'\n${combined_output}")
