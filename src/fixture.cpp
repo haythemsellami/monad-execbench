@@ -352,7 +352,7 @@ namespace monad_execbench
                 .code = bytes(account.at("code"), account_path + ".code"),
                 .code_hash = {},
                 .storage = storage(account.at("storage"), account_path + ".storage")};
-            parsed.code_hash = monad::keccak256(parsed.code);
+            parsed.code_hash = monad::to_bytes(monad::keccak256(parsed.code));
             if (account.contains("codeHash")) {
                 auto const declared = fixed_hex<monad::bytes32_t>(
                     account.at("codeHash"), account_path + ".codeHash");

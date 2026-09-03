@@ -40,7 +40,9 @@ add_executable(monad-execbench src/fixture.cpp src/main.cpp src/replay.cpp)
 
 target_compile_features(monad-execbench PRIVATE cxx_std_23)
 target_include_directories(monad-execbench PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
-target_compile_options(monad-execbench PRIVATE -Wall -Wextra -Wconversion -Werror)
+target_compile_options(
+  monad-execbench
+  PRIVATE -Wall -Wextra -Wconversion -Werror -Wno-missing-field-initializers)
 target_compile_definitions(
   monad-execbench
   PRIVATE MONAD_EXECBENCH_VERSION="${PROJECT_VERSION}"
