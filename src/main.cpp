@@ -15,6 +15,7 @@
 #include <array>
 #include <bit>
 #include <cstdint>
+#include <exception>
 #include <filesystem>
 #include <iomanip>
 #include <iostream>

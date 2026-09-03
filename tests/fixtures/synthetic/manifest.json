@@ -1,7 +1,7 @@
 {
   "schema": "monad-execbench/v1",
   "chain": {
-    "chainId": "143",
+    "chainId": 143,
     "executionEnv": "MONAD_TEN"
   },
   "block": {

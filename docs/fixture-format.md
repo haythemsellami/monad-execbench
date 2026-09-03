@@ -41,8 +41,9 @@ The first schema version is `monad-execbench/v1`:
 }
 ```
 
-Unsigned quantities may be decimal or `0x`-prefixed strings. Addresses and
-32-byte values must have their full fixed width. `blockHashes` is optional;
+Unsigned quantities may be JSON integers, decimal strings, or `0x`-prefixed
+strings. Addresses and 32-byte values must have their full fixed width.
+`blockHashes` is optional;
 `parentHash` automatically supplies the hash for `number - 1`. Older block
 hashes used by the `BLOCKHASH` opcode must be included in `blockHashes`.
 
