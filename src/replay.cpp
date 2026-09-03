@@ -60,15 +60,19 @@ namespace monad_execbench
         template <typename T, typename Predicate>
         bool contains(std::vector<T> const &values, Predicate predicate)
         {
-            return std::find_if(values.begin(), values.end(), predicate) != values.end();
+            return std::find_if(values.begin(), values.end(), predicate) !=
+                   values.end();
         }
 
-        AccountFixture const *find_account(
-            FixtureSuite const &suite, monad::Address const &address)
+        AccountFixture const *
+        find_account(FixtureSuite const &suite, monad::Address const &address)
         {
             auto const found = std::find_if(
-                suite.accounts.begin(), suite.accounts.end(),
-                [&address](auto const &account) { return account.address == address; });
+                suite.accounts.begin(),
+                suite.accounts.end(),
+                [&address](auto const &account) {
+                    return account.address == address;
+                });
             return found == suite.accounts.end() ? nullptr : &*found;
         }
 
@@ -80,7 +84,9 @@ namespace monad_execbench
 
             void add_missing(std::string message)
             {
-                if (!contains(missing_, [&message](auto const &entry) { return entry == message; })) {
+                if (!contains(missing_, [&message](auto const &entry) {
+                        return entry == message;
+                    })) {
                     missing_.push_back(std::move(message));
                 }
             }
@@ -102,7 +108,8 @@ namespace monad_execbench
                 return inner_.is_page_encoded();
             }
 
-            std::optional<monad::Account> read_account(monad::Address const &address) override
+            std::optional<monad::Account>
+            read_account(monad::Address const &address) override
             {
                 auto const known_absent = contains(
                     suite_.absent_accounts,
@@ -119,11 +126,13 @@ namespace monad_execbench
             {
                 auto const *account = find_account(suite_, address);
                 if (account == nullptr) {
-                    add_missing("uncaptured storage " + hex(address) + "[" + hex(key) + "]");
+                    add_missing(
+                        "uncaptured storage " + hex(address) + "[" + hex(key) +
+                        "]");
                 }
-                else if (!contains(
-                             account->storage,
-                             [&key](auto const &slot) { return slot.key == key; })) {
+                else if (!contains(account->storage, [&key](auto const &slot) {
+                             return slot.key == key;
+                         })) {
                     add_missing(
                         "uncaptured storage " + hex(address) + "[" + hex(key) +
                         "] (code hash " + hex(account->code_hash) + ")");
@@ -138,14 +147,15 @@ namespace monad_execbench
                 return inner_.read_storage_page(address, incarnation, page_key);
             }
 
-            monad::vm::SharedIntercode read_code(monad::bytes32_t const &code_hash) override
+            monad::vm::SharedIntercode
+            read_code(monad::bytes32_t const &code_hash) override
             {
                 if (!contains(
-                        suite_.accounts,
-                        [&code_hash](auto const &account) {
+                        suite_.accounts, [&code_hash](auto const &account) {
                             return account.code_hash == code_hash;
                         })) {
-                    add_missing("uncaptured runtime code with hash " + hex(code_hash));
+                    add_missing(
+                        "uncaptured runtime code with hash " + hex(code_hash));
                 }
                 return inner_.read_code(code_hash);
             }
@@ -176,13 +186,15 @@ namespace monad_execbench
             }
 
             void set_block_and_prefix(
-                std::uint64_t block_number, monad::bytes32_t const &block_id) override
+                std::uint64_t block_number,
+                monad::bytes32_t const &block_id) override
             {
                 inner_.set_block_and_prefix(block_number, block_id);
             }
 
             void finalize(
-                std::uint64_t block_number, monad::bytes32_t const &block_id) override
+                std::uint64_t block_number,
+                monad::bytes32_t const &block_id) override
             {
                 inner_.finalize(block_number, block_id);
             }
@@ -193,13 +205,15 @@ namespace monad_execbench
             }
 
             void update_voted_metadata(
-                std::uint64_t block_number, monad::bytes32_t const &block_id) override
+                std::uint64_t block_number,
+                monad::bytes32_t const &block_id) override
             {
                 inner_.update_voted_metadata(block_number, block_id);
             }
 
             void update_proposed_metadata(
-                std::uint64_t block_number, monad::bytes32_t const &block_id) override
+                std::uint64_t block_number,
+                monad::bytes32_t const &block_id) override
             {
                 inner_.update_proposed_metadata(block_number, block_id);
             }
@@ -211,11 +225,17 @@ namespace monad_execbench
 
             void commit(
                 monad::bytes32_t const &block_id, monad::CommitBuilder &builder,
-                monad::BlockHeader const &header, monad::StateDeltas const &state_deltas,
-                std::function<void(monad::BlockHeader &)> populate_header_fn) override
+                monad::BlockHeader const &header,
+                monad::StateDeltas const &state_deltas,
+                std::function<void(monad::BlockHeader &)> populate_header_fn)
+                override
             {
                 inner_.commit(
-                    block_id, builder, header, state_deltas, std::move(populate_header_fn));
+                    block_id,
+                    builder,
+                    header,
+                    state_deltas,
+                    std::move(populate_header_fn));
             }
 
             std::string print_stats() override
@@ -244,14 +264,19 @@ namespace monad_execbench
             monad::bytes32_t const &get(std::uint64_t number) const override
             {
                 auto const found = std::find_if(
-                    block_.block_hashes.begin(), block_.block_hashes.end(),
-                    [number](auto const &entry) { return entry.first == number; });
+                    block_.block_hashes.begin(),
+                    block_.block_hashes.end(),
+                    [number](auto const &entry) {
+                        return entry.first == number;
+                    });
                 if (found != block_.block_hashes.end()) {
                     return found->second;
                 }
-                auto const message = "uncaptured block hash " + std::to_string(number);
-                if (!contains(
-                        missing_, [&message](auto const &entry) { return entry == message; })) {
+                auto const message =
+                    "uncaptured block hash " + std::to_string(number);
+                if (!contains(missing_, [&message](auto const &entry) {
+                        return entry == message;
+                    })) {
                     missing_.push_back(message);
                 }
                 return zero_;
@@ -291,7 +316,10 @@ namespace monad_execbench
             auto released = std::move(block_state).release();
             monad::BlockHeader base_header{.number = 0};
             monad::test::commit_simple(
-                base->trie_db, *released.state, released.code, monad::NULL_HASH_BLAKE3,
+                base->trie_db,
+                *released.state,
+                released.code,
+                monad::NULL_HASH_BLAKE3,
                 base_header);
             base->trie_db.finalize(0, monad::NULL_HASH_BLAKE3);
             return base;
@@ -326,33 +354,38 @@ namespace monad_execbench
             monad::trace::StateTracer state_tracer{std::monostate{}};
             evmc_tx_context tx_context{};
             std::vector<monad::Address> senders{};
-            std::vector<std::vector<std::optional<monad::Address>>> authorities{};
+            std::vector<std::vector<std::optional<monad::Address>>>
+                authorities{};
             ankerl::unordered_dense::segmented_set<monad::Address>
                 senders_and_authorities{};
             monad::ChainContext<Traits> chain_context;
             monad::EvmcHost<Traits> host;
 
             ReplayHost(
-                monad::BlockHashBuffer const &block_hash_buffer, monad::State &state,
-                monad::Transaction const &transaction, monad::Address const &sender,
-                monad::BlockHeader const &header, monad::uint256_t const &chain_id,
+                monad::BlockHashBuffer const &block_hash_buffer,
+                monad::State &state, monad::Transaction const &transaction,
+                monad::Address const &sender, monad::BlockHeader const &header,
+                monad::uint256_t const &chain_id,
                 monad::MonadMainnet const &chain)
                 : tx_context{monad::get_tx_context<Traits>(
                       transaction, sender, header, chain_id,
                       chain.get_blob_schedule(header.timestamp))}
                 , senders{sender}
                 , authorities(1)
-                , senders_and_authorities{
-                      monad::combine_senders_and_authorities(senders, authorities)}
-                , chain_context{
-                      .grandparent_senders_and_authorities = senders_and_authorities,
-                      .parent_senders_and_authorities = senders_and_authorities,
-                      .senders_and_authorities = senders_and_authorities,
-                      .senders = senders,
-                      .authorities = authorities}
+                , senders_and_authorities{monad::
+                                              combine_senders_and_authorities(
+                                                  senders, authorities)}
+                , chain_context{.grandparent_senders_and_authorities = senders_and_authorities, .parent_senders_and_authorities = senders_and_authorities, .senders_and_authorities = senders_and_authorities, .senders = senders, .authorities = authorities}
                 , host{
-                      call_tracer, state_tracer, tx_context, block_hash_buffer, state,
-                      transaction, header.base_fee_per_gas, 0, chain_context}
+                      call_tracer,
+                      state_tracer,
+                      tx_context,
+                      block_hash_buffer,
+                      state,
+                      transaction,
+                      header.base_fee_per_gas,
+                      0,
+                      chain_context}
             {
             }
         };
@@ -387,23 +420,28 @@ namespace monad_execbench
                     failures.push_back(prefix + " expected account is absent");
                     continue;
                 }
-                if (expected.balance && state.get_balance(expected.address) != *expected.balance) {
+                if (expected.balance &&
+                    state.get_balance(expected.address) != *expected.balance) {
                     failures.push_back(prefix + " balance mismatch");
                 }
-                if (expected.nonce && state.get_nonce(expected.address) != *expected.nonce) {
+                if (expected.nonce &&
+                    state.get_nonce(expected.address) != *expected.nonce) {
                     failures.push_back(prefix + " nonce mismatch");
                 }
                 if (expected.code) {
                     auto const size = state.get_code_size(expected.address);
                     monad::byte_string actual(size, 0);
-                    state.copy_code(expected.address, 0, actual.data(), actual.size());
+                    state.copy_code(
+                        expected.address, 0, actual.data(), actual.size());
                     if (actual != *expected.code) {
                         failures.push_back(prefix + " runtime code mismatch");
                     }
                 }
                 for (auto const &slot : expected.storage) {
-                    if (state.get_storage(expected.address, slot.key) != slot.value) {
-                        failures.push_back(prefix + " storage " + hex(slot.key) + " mismatch");
+                    if (state.get_storage(expected.address, slot.key) !=
+                        slot.value) {
+                        failures.push_back(
+                            prefix + " storage " + hex(slot.key) + " mismatch");
                     }
                 }
             }
@@ -424,12 +462,21 @@ namespace monad_execbench
             monad::MonadMainnet const chain{};
             FixtureBlockHashBuffer block_hash_buffer{suite.block};
             ReplayHost replay_host{
-                block_hash_buffer, state, transaction, replay_case.message.sender,
-                header, suite.chain_id, chain};
+                block_hash_buffer,
+                state,
+                transaction,
+                replay_case.message.sender,
+                header,
+                suite.chain_id,
+                chain};
 
             monad::init_reserve_balance_context<Traits>(
-                state, replay_case.message.sender, transaction,
-                header.base_fee_per_gas, 0, replay_host.state_tracer,
+                state,
+                replay_case.message.sender,
+                transaction,
+                header.base_fee_per_gas,
+                0,
+                replay_host.state_tracer,
                 replay_host.chain_context);
 
             replay_host.host.access_account(header.beneficiary);
@@ -452,7 +499,8 @@ namespace monad_execbench
                 .sender = replay_case.message.sender,
                 .input_data = replay_case.message.input.data(),
                 .input_size = replay_case.message.input.size(),
-                .value = monad::store_be_as<evmc::uint256be>(replay_case.message.value),
+                .value = monad::store_be_as<evmc::uint256be>(
+                    replay_case.message.value),
                 .create2_salt = {},
                 .code_address = replay_case.message.recipient,
                 .memory_handle = message_memory.get(),
@@ -460,7 +508,8 @@ namespace monad_execbench
                 .memory_capacity = vm.message_memory_capacity()};
 
             if (auto const delegate = monad::vm::evm::resolve_delegation(
-                    &replay_host.host.get_interface(), replay_host.host.to_context(),
+                    &replay_host.host.get_interface(),
+                    replay_host.host.to_context(),
                     replay_case.message.recipient)) {
                 message.code_address = *delegate;
                 message.flags |= EVMC_DELEGATED;
@@ -472,7 +521,8 @@ namespace monad_execbench
             auto output_bytes = monad::byte_string{};
             if (result.output_size != 0) {
                 output_bytes.assign(
-                    result.output_data, result.output_data + result.output_size);
+                    result.output_data,
+                    result.output_data + result.output_size);
             }
             ReplayResult replay_result{
                 .status = result.status_code,
@@ -482,15 +532,17 @@ namespace monad_execbench
                 .logs = {state.logs().begin(), state.logs().end()},
                 .failures = {}};
 
-            if (status_name(replay_result.status) != replay_case.expected.status) {
+            if (status_name(replay_result.status) !=
+                replay_case.expected.status) {
                 replay_result.failures.push_back(
-                    "status mismatch: expected " + replay_case.expected.status + ", got " +
-                    status_name(replay_result.status));
+                    "status mismatch: expected " + replay_case.expected.status +
+                    ", got " + status_name(replay_result.status));
             }
             if (replay_result.output != replay_case.expected.output) {
                 replay_result.failures.push_back(
-                    "output mismatch: expected " + hex(replay_case.expected.output) +
-                    ", got " + hex(replay_result.output));
+                    "output mismatch: expected " +
+                    hex(replay_case.expected.output) + ", got " +
+                    hex(replay_result.output));
             }
             if (replay_result.gas_used != replay_case.expected.gas_used) {
                 replay_result.failures.push_back(
@@ -504,10 +556,12 @@ namespace monad_execbench
             }
             verify_expected_state(replay_case, state, replay_result.failures);
             replay_result.failures.insert(
-                replay_result.failures.end(), validating_db.missing().begin(),
+                replay_result.failures.end(),
+                validating_db.missing().begin(),
                 validating_db.missing().end());
             replay_result.failures.insert(
-                replay_result.failures.end(), block_hash_buffer.missing().begin(),
+                replay_result.failures.end(),
+                block_hash_buffer.missing().begin(),
                 block_hash_buffer.missing().end());
             return replay_result;
         }
@@ -527,10 +581,10 @@ namespace monad_execbench
 
     VerificationSummary verify_fixture_suite(
         FixtureSuite const &suite,
-        std::optional<std::string> const &execution_env,
-        std::ostream &output)
+        std::optional<std::string> const &execution_env, std::ostream &output)
     {
-        auto const selected_environment = execution_env.value_or(suite.execution_env);
+        auto const selected_environment =
+            execution_env.value_or(suite.execution_env);
         if (selected_environment != suite.execution_env) {
             throw std::runtime_error{
                 "execution environment " + selected_environment +
@@ -548,7 +602,8 @@ namespace monad_execbench
                 fail_case(replay_case, "InterpreterOnly", interpreter.failures);
             }
 
-            auto const dual = execute_case(suite, replay_case, monad::vm::VM::Dual);
+            auto const dual =
+                execute_case(suite, replay_case, monad::vm::VM::Dual);
             if (!dual.failures.empty()) {
                 fail_case(replay_case, "Dual", dual.failures);
             }
@@ -561,8 +616,8 @@ namespace monad_execbench
                     "' differs between InterpreterOnly and Dual"};
             }
 
-            output << "case=" << replay_case.name << " status=verified gas_used="
-                   << dual.gas_used << "\n";
+            output << "case=" << replay_case.name
+                   << " status=verified gas_used=" << dual.gas_used << "\n";
         }
 
         output << "execution_env=" << selected_environment << "\n"

@@ -14,6 +14,6 @@ namespace monad_execbench
     };
 
     VerificationSummary verify_fixture_suite(
-        FixtureSuite const &suite, std::optional<std::string> const &execution_env,
-        std::ostream &output);
+        FixtureSuite const &suite,
+        std::optional<std::string> const &execution_env, std::ostream &output);
 }
