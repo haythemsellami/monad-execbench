@@ -47,8 +47,7 @@ target_compile_definitions(
           MONAD_EXECBENCH_MONAD_COMMIT="${MONAD_EXECBENCH_MONAD_COMMIT}")
 target_link_libraries(
   monad-execbench
-  PRIVATE PkgConfig::zstd
-          evmc::mocked_host
+  PRIVATE evmc::mocked_host
           monad_execution)
 
 include(CTest)
