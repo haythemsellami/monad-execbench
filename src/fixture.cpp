@@ -135,7 +135,8 @@ namespace monad_execbench
             if (!value.is_string()) {
                 invalid(
                     path,
-                    "expected an unsigned integer or decimal/0x-prefixed integer string");
+                    "expected an unsigned integer or decimal/0x-prefixed "
+                    "integer string");
             }
             try {
                 return monad::from_string<monad::uint256_t>(
@@ -426,8 +427,7 @@ namespace monad_execbench
                 account.at("codeHash"), account_path + ".codeHash");
             if (declared != parsed.code_hash) {
                 invalid(
-                    account_path + ".codeHash",
-                    "does not match runtime code");
+                    account_path + ".codeHash", "does not match runtime code");
             }
             suite.accounts.push_back(std::move(parsed));
         }
