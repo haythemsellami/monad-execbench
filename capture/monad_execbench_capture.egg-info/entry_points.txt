@@ -1,2 +1,0 @@
-[console_scripts]
-monad-execbench-capture = monad_execbench_capture.cli:main

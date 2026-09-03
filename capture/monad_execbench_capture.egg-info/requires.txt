@@ -1,4 +1,0 @@
-zstandard<1,>=0.23
-
-[dev]
-ruff<1,>=0.16
