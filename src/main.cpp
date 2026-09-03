@@ -102,6 +102,12 @@ namespace
 
     int run_verify(int argc, char **argv)
     {
+        if (argc == 3 &&
+            (std::string_view{argv[2]} == "--help" ||
+             std::string_view{argv[2]} == "-h")) {
+            print_usage(std::cout);
+            return 0;
+        }
         if (argc < 3) {
             std::cerr << "verify requires a fixture-suite directory\n";
             print_usage(std::cerr);
