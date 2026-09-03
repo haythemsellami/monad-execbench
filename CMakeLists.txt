@@ -64,11 +64,12 @@ if(BUILD_TESTING)
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/synthetic")
   add_test(
     NAME monad-execbench-reject-incomplete-state
-    COMMAND monad-execbench verify
-            "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/incomplete")
-  set_tests_properties(
-    monad-execbench-reject-incomplete-state
-    PROPERTIES WILL_FAIL TRUE PASS_REGULAR_EXPRESSION "uncaptured storage")
+    COMMAND
+      "${CMAKE_COMMAND}"
+      "-DPROGRAM=$<TARGET_FILE:monad-execbench>"
+      "-DFIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/incomplete"
+      "-DEXPECTED=uncaptured storage"
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/expect_failure.cmake")
 endif()
 
 install(TARGETS monad-execbench RUNTIME DESTINATION bin)
