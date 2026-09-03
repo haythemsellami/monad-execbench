@@ -1,3 +1,16 @@
+Metadata-Version: 2.4
+Name: monad-execbench-capture
+Version: 0.1.0
+Summary: Capture portable execution fixtures for monad-execbench
+License-Expression: GPL-3.0-only
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: zstandard<1,>=0.23
+Provides-Extra: dev
+Requires-Dist: ruff<1,>=0.16; extra == "dev"
+Dynamic: license-file
+
 # monad-execbench
 
 `monad-execbench` is a contract-agnostic tool for replaying and benchmarking arbitrary EVM calls with the production Monad C++ execution engine.
