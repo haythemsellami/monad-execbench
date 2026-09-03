@@ -103,7 +103,7 @@ namespace monad_execbench
             }
         }
 
-        json const &
+        json const *
         required_field(json const &object, char const *key, std::string path)
         {
             if (!object.is_object()) {
@@ -113,13 +113,13 @@ namespace monad_execbench
             if (field == object.end()) {
                 invalid(path + "." + key, "missing required field");
             }
-            return *field;
+            return &*field;
         }
 
         std::string required_string(
             json const &object, char const *key, std::string const &path)
         {
-            auto const &value = required_field(object, key, path);
+            auto const &value = *required_field(object, key, path);
             if (!value.is_string()) {
                 invalid(path + "." + key, "expected a string");
             }
@@ -263,9 +263,9 @@ namespace monad_execbench
                 auto const &entry = value.at(i);
                 auto const entry_path = path + "[" + std::to_string(i) + "]";
                 auto const &address =
-                    required_field(entry, "address", entry_path);
+                    *required_field(entry, "address", entry_path);
                 auto const &storage_keys =
-                    required_field(entry, "storageKeys", entry_path);
+                    *required_field(entry, "storageKeys", entry_path);
                 if (!storage_keys.is_array()) {
                     invalid(entry_path + ".storageKeys", "expected an array");
                 }
@@ -295,10 +295,10 @@ namespace monad_execbench
                 auto const &entry = value.at(i);
                 auto const entry_path = path + "[" + std::to_string(i) + "]";
                 auto const &address =
-                    required_field(entry, "address", entry_path);
-                auto const &data = required_field(entry, "data", entry_path);
+                    *required_field(entry, "address", entry_path);
+                auto const &data = *required_field(entry, "data", entry_path);
                 auto const &topics =
-                    required_field(entry, "topics", entry_path);
+                    *required_field(entry, "topics", entry_path);
                 if (!topics.is_array()) {
                     invalid(entry_path + ".topics", "expected an array");
                 }
@@ -379,43 +379,43 @@ namespace monad_execbench
             invalid("manifest.schema", "unsupported schema " + suite.schema);
         }
 
-        auto const &chain = required_field(manifest, "chain", "manifest");
+        auto const &chain = *required_field(manifest, "chain", "manifest");
         if (!chain.is_object()) {
             invalid("manifest.chain", "expected an object");
         }
         suite.chain_id = uint256(
-            required_field(chain, "chainId", "manifest.chain"),
+            *required_field(chain, "chainId", "manifest.chain"),
             "manifest.chain.chainId");
         suite.execution_env =
             required_string(chain, "executionEnv", "manifest.chain");
 
-        auto const &block = required_field(manifest, "block", "manifest");
+        auto const &block = *required_field(manifest, "block", "manifest");
         if (!block.is_object()) {
             invalid("manifest.block", "expected an object");
         }
         suite.block.number = uint64(
-            required_field(block, "number", "manifest.block"),
+            *required_field(block, "number", "manifest.block"),
             "manifest.block.number");
         suite.block.hash = fixed_hex<monad::bytes32_t>(
-            required_field(block, "hash", "manifest.block"),
+            *required_field(block, "hash", "manifest.block"),
             "manifest.block.hash");
         suite.block.parent_hash = fixed_hex<monad::bytes32_t>(
-            required_field(block, "parentHash", "manifest.block"),
+            *required_field(block, "parentHash", "manifest.block"),
             "manifest.block.parentHash");
         suite.block.timestamp = uint64(
-            required_field(block, "timestamp", "manifest.block"),
+            *required_field(block, "timestamp", "manifest.block"),
             "manifest.block.timestamp");
         suite.block.gas_limit = uint64(
-            required_field(block, "gasLimit", "manifest.block"),
+            *required_field(block, "gasLimit", "manifest.block"),
             "manifest.block.gasLimit");
         suite.block.base_fee = uint256(
-            required_field(block, "baseFee", "manifest.block"),
+            *required_field(block, "baseFee", "manifest.block"),
             "manifest.block.baseFee");
         suite.block.beneficiary = fixed_hex<monad::Address>(
-            required_field(block, "beneficiary", "manifest.block"),
+            *required_field(block, "beneficiary", "manifest.block"),
             "manifest.block.beneficiary");
         suite.block.prev_randao = fixed_hex<monad::bytes32_t>(
-            required_field(block, "prevRandao", "manifest.block"),
+            *required_field(block, "prevRandao", "manifest.block"),
             "manifest.block.prevRandao");
         if (suite.block.number > 0) {
             suite.block.block_hashes.emplace_back(
@@ -451,7 +451,8 @@ namespace monad_execbench
 
         auto const state_json = read_json(referenced_file(
             normalized_directory, manifest, "state", "state.json.zst"));
-        auto const &accounts = required_field(state_json, "accounts", "state");
+        auto const &accounts =
+            *required_field(state_json, "accounts", "state");
         if (!accounts.is_object()) {
             invalid("state.accounts", "expected an object");
         }
@@ -465,21 +466,21 @@ namespace monad_execbench
                 .address =
                     fixed_hex<monad::Address>(address_json, account_path),
                 .balance = uint256(
-                    required_field(account, "balance", account_path),
+                    *required_field(account, "balance", account_path),
                     account_path + ".balance"),
                 .nonce = uint64(
-                    required_field(account, "nonce", account_path),
+                    *required_field(account, "nonce", account_path),
                     account_path + ".nonce"),
                 .code = bytes(
-                    required_field(account, "code", account_path),
+                    *required_field(account, "code", account_path),
                     account_path + ".code"),
                 .code_hash = {},
                 .storage = storage(
-                    required_field(account, "storage", account_path),
+                    *required_field(account, "storage", account_path),
                     account_path + ".storage")};
             parsed.code_hash = monad::to_bytes(monad::keccak256(parsed.code));
             auto const declared = fixed_hex<monad::bytes32_t>(
-                required_field(account, "codeHash", account_path),
+                *required_field(account, "codeHash", account_path),
                 account_path + ".codeHash");
             if (declared != parsed.code_hash) {
                 invalid(
@@ -520,11 +521,11 @@ namespace monad_execbench
         for (std::size_t i = 0; i < cases_json.size(); ++i) {
             auto const &value = cases_json.at(i);
             auto const path = "cases[" + std::to_string(i) + "]";
-            auto const &message = required_field(value, "message", path);
+            auto const &message = *required_field(value, "message", path);
             if (!message.is_object()) {
                 invalid(path + ".message", "expected an object");
             }
-            auto const &expected = required_field(value, "expected", path);
+            auto const &expected = *required_field(value, "expected", path);
             if (!expected.is_object()) {
                 invalid(path + ".expected", "expected an object");
             }
@@ -533,19 +534,21 @@ namespace monad_execbench
                 .message =
                     MessageFixture{
                         .sender = fixed_hex<monad::Address>(
-                            required_field(message, "from", path + ".message"),
+                            *required_field(message, "from", path + ".message"),
                             path + ".message.from"),
                         .recipient = fixed_hex<monad::Address>(
-                            required_field(message, "to", path + ".message"),
+                            *required_field(message, "to", path + ".message"),
                             path + ".message.to"),
                         .input = bytes(
-                            required_field(message, "input", path + ".message"),
+                            *required_field(
+                                message, "input", path + ".message"),
                             path + ".message.input"),
                         .value = uint256(
-                            required_field(message, "value", path + ".message"),
+                            *required_field(
+                                message, "value", path + ".message"),
                             path + ".message.value"),
                         .gas = uint64(
-                            required_field(message, "gas", path + ".message"),
+                            *required_field(message, "gas", path + ".message"),
                             path + ".message.gas"),
                         .gas_price = message.contains("gasPrice")
                                          ? uint256(
@@ -561,10 +564,12 @@ namespace monad_execbench
                     .status =
                         required_string(expected, "status", path + ".expected"),
                     .output = bytes(
-                        required_field(expected, "output", path + ".expected"),
+                        *required_field(
+                            expected, "output", path + ".expected"),
                         path + ".expected.output"),
                     .gas_used = uint64(
-                        required_field(expected, "gasUsed", path + ".expected"),
+                        *required_field(
+                            expected, "gasUsed", path + ".expected"),
                         path + ".expected.gasUsed"),
                     .logs =
                         expected.contains("logs")
