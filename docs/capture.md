@@ -82,6 +82,10 @@ The call tracer supplies the root execution gas after transaction intrinsic
 gas. The normalized fixture therefore contains the direct-VM gas limit and gas
 used values expected by the C++ runner.
 
+`provenance.json` records the pinned chain and block, Monad commit, capture and
+runtime versions, the input call-manifest hash, hashes of every fixture payload,
+and a hash of the normalized uncompressed state. The RPC URL is never stored.
+
 Expected output currently includes success or revert status, output data,
 execution gas, logs, and storage/code/contract-nonce changes reported by the
 prestate diff tracer. Sender nonce and balance changes are excluded because

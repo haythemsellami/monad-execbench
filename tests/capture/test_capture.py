@@ -17,6 +17,7 @@ from monad_execbench_capture.capture import (
     collect_logs,
     derive_execution_gas,
     load_calls_document,
+    sha256,
     write_bundle,
 )
 
@@ -219,6 +220,16 @@ class CaptureTest(unittest.TestCase):
             self.assertEqual(state, bundle.state)
             provenance = json.loads((output / "provenance.json").read_text())
             self.assertNotIn("rpc", json.dumps(provenance).lower())
+            for name in ("manifest.json", "cases.json", "state.json.zst"):
+                self.assertEqual(
+                    provenance["files"][name], sha256((output / name).read_bytes())
+                )
+            self.assertEqual(
+                provenance["normalized"]["stateSha256"],
+                sha256(
+                    (json.dumps(bundle.state, indent=2, sort_keys=True) + "\n").encode()
+                ),
+            )
 
 
 if __name__ == "__main__":

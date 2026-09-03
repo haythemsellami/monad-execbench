@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import platform
 import shutil
 import tempfile
 from collections.abc import Mapping
@@ -612,14 +613,16 @@ def write_bundle(
         "captureTool": {
             "name": "monad-execbench-capture",
             "version": capture_version,
+            "pythonVersion": platform.python_version(),
+            "zstandardVersion": zstandard.__version__,
         },
         "inputs": {"callsSha256": sha256(calls_bytes)},
         "files": {
             "manifest.json": sha256(manifest_bytes),
             "cases.json": sha256(cases_bytes),
             "state.json.zst": sha256(state_compressed),
-            "state.normalized.json": sha256(state_bytes),
         },
+        "normalized": {"stateSha256": sha256(state_bytes)},
     }
 
     temporary = Path(tempfile.mkdtemp(prefix=f".{output.name}.", dir=output.parent))
