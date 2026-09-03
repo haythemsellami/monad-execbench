@@ -117,5 +117,6 @@ host, run the live capture-to-replay integration test:
 ```
 
 The integration test covers a successful nested call, state read inside a
-reverted child frame, a storage write, a root revert with data, and an emitted
-log. The generated fixture is then verified in both VM modes.
+reverted child frame, a storage write, a root revert with data, an emitted log,
+and access-list warming. The generated fixture is then verified in both VM
+modes.

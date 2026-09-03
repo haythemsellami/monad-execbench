@@ -63,6 +63,15 @@ def calls_document() -> dict[str, object]:
             {"name": "probe/storage-write", "from": SENDER, "to": STORAGE_WRITER},
             {"name": "probe/root-revert", "from": SENDER, "to": REVERTER},
             {"name": "probe/log", "from": SENDER, "to": LOGGER},
+            {
+                "name": "probe/access-list",
+                "from": SENDER,
+                "to": ROOT,
+                "accessList": [
+                    {"address": ROOT, "storageKeys": ["0x2"]},
+                    {"address": CHILD, "storageKeys": ["0x1"]},
+                ],
+            },
         ],
     }
 
@@ -107,7 +116,7 @@ def main() -> int:
             if result.returncode != 0:
                 print(result.stderr, end="")
                 return result.returncode
-            if "cases=4\nverification=passed\n" not in result.stdout:
+            if "cases=5\nverification=passed\n" not in result.stdout:
                 raise RuntimeError("verifier did not report the expected summary")
         return 0
     finally:
