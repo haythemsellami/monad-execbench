@@ -36,7 +36,7 @@ add_subdirectory(
   "${CMAKE_CURRENT_BINARY_DIR}/third_party/monad"
   EXCLUDE_FROM_ALL)
 
-add_executable(monad-execbench src/fixture.cpp src/main.cpp)
+add_executable(monad-execbench src/fixture.cpp src/main.cpp src/replay.cpp)
 
 target_compile_features(monad-execbench PRIVATE cxx_std_23)
 target_include_directories(monad-execbench PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
@@ -57,6 +57,17 @@ if(BUILD_TESTING)
   add_test(
     NAME monad-execbench-smoke
     COMMAND monad-execbench smoke --execution-env MONAD_TEN)
+  add_test(
+    NAME monad-execbench-verify-synthetic
+    COMMAND monad-execbench verify
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/synthetic")
+  add_test(
+    NAME monad-execbench-reject-incomplete-state
+    COMMAND monad-execbench verify
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/incomplete")
+  set_tests_properties(
+    monad-execbench-reject-incomplete-state
+    PROPERTIES WILL_FAIL TRUE PASS_REGULAR_EXPRESSION "uncaptured storage")
 endif()
 
 install(TARGETS monad-execbench RUNTIME DESTINATION bin)
