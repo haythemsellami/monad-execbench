@@ -3,6 +3,9 @@
 #include <category/vm/runtime/types.hpp>
 #include <category/vm/vm.hpp>
 
+#include <monad-execbench/fixture.hpp>
+#include <monad-execbench/replay.hpp>
+
 #include <ethash/keccak.hpp>
 
 #include <evmc/evmc.h>
@@ -12,8 +15,11 @@
 #include <array>
 #include <bit>
 #include <cstdint>
+#include <exception>
+#include <filesystem>
 #include <iomanip>
 #include <iostream>
+#include <optional>
 #include <span>
 #include <sstream>
 #include <string>
@@ -28,7 +34,9 @@ namespace
         output << "Usage:\n"
                << "  monad-execbench --help\n"
                << "  monad-execbench --version\n"
-               << "  monad-execbench smoke [--execution-env MONAD_TEN]\n";
+               << "  monad-execbench smoke [--execution-env MONAD_TEN]\n"
+               << "  monad-execbench verify <fixture-suite> "
+                  "[--execution-env MONAD_TEN]\n";
     }
 
     std::string to_hex(std::uint8_t const *data, std::size_t const size)
@@ -92,6 +100,48 @@ namespace
                   << to_hex(result.output_data, result.output_size) << '\n';
         return 0;
     }
+
+    int run_verify(int argc, char **argv)
+    {
+        if (argc == 3 && (std::string_view{argv[2]} == "--help" ||
+                          std::string_view{argv[2]} == "-h")) {
+            print_usage(std::cout);
+            return 0;
+        }
+        if (argc < 3) {
+            std::cerr << "verify requires a fixture-suite directory\n";
+            print_usage(std::cerr);
+            return 2;
+        }
+
+        std::filesystem::path const fixture_directory{argv[2]};
+        std::optional<std::string> execution_env;
+        for (int i = 3; i < argc; ++i) {
+            std::string_view const argument{argv[i]};
+            if (argument == "--help" || argument == "-h") {
+                print_usage(std::cout);
+                return 0;
+            }
+            if (argument != "--execution-env" || i + 1 >= argc) {
+                std::cerr << "invalid verify argument: " << argument << '\n';
+                print_usage(std::cerr);
+                return 2;
+            }
+            execution_env = argv[++i];
+        }
+
+        try {
+            auto const suite =
+                monad_execbench::load_fixture_suite(fixture_directory);
+            monad_execbench::verify_fixture_suite(
+                suite, execution_env, std::cout);
+            return 0;
+        }
+        catch (std::exception const &error) {
+            std::cerr << "verification failed: " << error.what() << '\n';
+            return 1;
+        }
+    }
 }
 
 int main(int argc, char **argv)
@@ -106,6 +156,10 @@ int main(int argc, char **argv)
         std::cout << MONAD_EXECBENCH_VERSION << " (Monad "
                   << MONAD_EXECBENCH_MONAD_COMMIT << ")\n";
         return 0;
+    }
+
+    if (std::string_view{argv[1]} == "verify") {
+        return run_verify(argc, argv);
     }
 
     if (std::string_view{argv[1]} != "smoke") {

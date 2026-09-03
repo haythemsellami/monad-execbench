@@ -36,10 +36,13 @@ add_subdirectory(
   "${CMAKE_CURRENT_BINARY_DIR}/third_party/monad"
   EXCLUDE_FROM_ALL)
 
-add_executable(monad-execbench src/main.cpp)
+add_executable(monad-execbench src/fixture.cpp src/main.cpp src/replay.cpp)
 
 target_compile_features(monad-execbench PRIVATE cxx_std_23)
-target_compile_options(monad-execbench PRIVATE -Wall -Wextra -Wconversion -Werror)
+target_include_directories(monad-execbench PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_compile_options(
+  monad-execbench
+  PRIVATE -Wall -Wextra -Wconversion -Werror -Wno-missing-field-initializers)
 target_compile_definitions(
   monad-execbench
   PRIVATE MONAD_EXECBENCH_VERSION="${PROJECT_VERSION}"
@@ -55,6 +58,26 @@ if(BUILD_TESTING)
   add_test(
     NAME monad-execbench-smoke
     COMMAND monad-execbench smoke --execution-env MONAD_TEN)
+  add_test(
+    NAME monad-execbench-verify-synthetic
+    COMMAND monad-execbench verify
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/synthetic")
+  add_test(
+    NAME monad-execbench-reject-incomplete-state
+    COMMAND
+      "${CMAKE_COMMAND}"
+      "-DPROGRAM=$<TARGET_FILE:monad-execbench>"
+      "-DFIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/incomplete"
+      "-DEXPECTED=uncaptured storage"
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/expect_failure.cmake")
+  add_test(
+    NAME monad-execbench-fixture-validation
+    COMMAND
+      "${CMAKE_COMMAND}"
+      "-DPROGRAM=$<TARGET_FILE:monad-execbench>"
+      "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+      "-DBINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixture_validation.cmake")
 endif()
 
 install(TARGETS monad-execbench RUNTIME DESTINATION bin)

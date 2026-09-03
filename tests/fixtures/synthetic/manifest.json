@@ -1,0 +1,19 @@
+{
+  "schema": "monad-execbench/v1",
+  "chain": {
+    "chainId": 143,
+    "executionEnv": "MONAD_TEN"
+  },
+  "block": {
+    "number": "100",
+    "hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "parentHash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "timestamp": "2000000000",
+    "gasLimit": "200000000",
+    "baseFee": "0",
+    "beneficiary": "0x3000000000000000000000000000000000000000",
+    "prevRandao": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "state": "state.json",
+  "cases": "cases.json"
+}
