@@ -383,6 +383,10 @@ namespace monad_execbench
         {
             for (auto const &expected : replay_case.expected.state) {
                 auto const prefix = "state " + hex(expected.address);
+                if (!state.account_exists(expected.address)) {
+                    failures.push_back(prefix + " expected account is absent");
+                    continue;
+                }
                 if (expected.balance && state.get_balance(expected.address) != *expected.balance) {
                     failures.push_back(prefix + " balance mismatch");
                 }

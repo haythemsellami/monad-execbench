@@ -13,7 +13,7 @@
     "expected": {
       "status": "success",
       "output": "0x000000000000000000000000000000000000000000000000000000000000002a",
-      "gasUsed": "16",
+      "gasUsed": "13",
       "logs": [],
       "state": {
         "0x2000000000000000000000000000000000000001": {
@@ -36,7 +36,7 @@
     "expected": {
       "status": "revert",
       "output": "0xdeadbeef",
-      "gasUsed": "18",
+      "gasUsed": "15",
       "logs": []
     }
   },
