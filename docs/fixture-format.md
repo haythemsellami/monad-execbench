@@ -12,7 +12,8 @@ fixture-suite/
 
 `state.json` is also accepted for small, reviewable fixtures. A compressed
 state file must be a Zstandard frame with its decompressed size recorded in
-the frame header.
+the frame header. Every encoded fixture file and every decompressed Zstandard
+payload is limited to 512 MiB.
 
 ## Manifest
 

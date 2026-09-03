@@ -70,6 +70,14 @@ if(BUILD_TESTING)
       "-DFIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/incomplete"
       "-DEXPECTED=uncaptured storage"
       -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/expect_failure.cmake")
+  add_test(
+    NAME monad-execbench-fixture-validation
+    COMMAND
+      "${CMAKE_COMMAND}"
+      "-DPROGRAM=$<TARGET_FILE:monad-execbench>"
+      "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+      "-DBINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixture_validation.cmake")
 endif()
 
 install(TARGETS monad-execbench RUNTIME DESTINATION bin)

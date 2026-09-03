@@ -9,9 +9,9 @@
 #include <algorithm>
 #include <charconv>
 #include <fstream>
-#include <iterator>
 #include <limits>
 #include <stdexcept>
+#include <system_error>
 #include <utility>
 
 namespace monad_execbench
@@ -19,6 +19,8 @@ namespace monad_execbench
     namespace
     {
         using json = nlohmann::json;
+        constexpr std::uintmax_t max_fixture_file_size =
+            512ULL * 1024ULL * 1024ULL;
 
         [[noreturn]] void
         invalid(std::string const &path, std::string const &message)
@@ -29,15 +31,35 @@ namespace monad_execbench
 
         json read_json(std::filesystem::path const &path)
         {
+            std::error_code file_size_error;
+            auto const file_size =
+                std::filesystem::file_size(path, file_size_error);
+            if (file_size_error) {
+                throw std::runtime_error{
+                    "cannot inspect fixture file " + path.string() + ": " +
+                    file_size_error.message()};
+            }
+            if (file_size > max_fixture_file_size) {
+                throw std::runtime_error{
+                    "fixture file exceeds 512 MiB: " + path.string()};
+            }
+
             std::ifstream input{path, std::ios::binary};
             if (!input) {
                 throw std::runtime_error{
                     "cannot open fixture file: " + path.string()};
             }
 
-            std::string payload{
-                std::istreambuf_iterator<char>{input},
-                std::istreambuf_iterator<char>{}};
+            std::string payload(static_cast<std::size_t>(file_size), '\0');
+            if (file_size != 0) {
+                input.read(
+                    payload.data(), static_cast<std::streamsize>(file_size));
+            }
+            if (input.gcount() != static_cast<std::streamsize>(file_size) ||
+                input.peek() != std::ifstream::traits_type::eof()) {
+                throw std::runtime_error{
+                    "fixture file changed while reading: " + path.string()};
+            }
             if (path.extension() == ".zst") {
                 auto const size =
                     ZSTD_getFrameContentSize(payload.data(), payload.size());
@@ -50,9 +72,10 @@ namespace monad_execbench
                         "zstd fixture must declare its decompressed size: " +
                         path.string()};
                 }
-                if (size > 512ULL * 1024ULL * 1024ULL) {
+                if (size > max_fixture_file_size) {
                     throw std::runtime_error{
-                        "fixture state exceeds 512 MiB: " + path.string()};
+                        "decompressed fixture file exceeds 512 MiB: " +
+                        path.string()};
                 }
 
                 std::string decompressed(static_cast<std::size_t>(size), '\0');
@@ -80,14 +103,27 @@ namespace monad_execbench
             }
         }
 
+        json const &required_field(
+            json const &object, char const *key, std::string const &path)
+        {
+            if (!object.is_object()) {
+                invalid(path, "expected an object");
+            }
+            auto const field = object.find(key);
+            if (field == object.end()) {
+                invalid(path + "." + key, "missing required field");
+            }
+            return *field;
+        }
+
         std::string required_string(
             json const &object, char const *key, std::string const &path)
         {
-            if (!object.is_object() || !object.contains(key) ||
-                !object.at(key).is_string()) {
+            auto const &value = required_field(object, key, path);
+            if (!value.is_string()) {
                 invalid(path + "." + key, "expected a string");
             }
-            return object.at(key).get<std::string>();
+            return value.get<std::string>();
         }
 
         template <typename T>
@@ -226,18 +262,19 @@ namespace monad_execbench
             for (std::size_t i = 0; i < value.size(); ++i) {
                 auto const &entry = value.at(i);
                 auto const entry_path = path + "[" + std::to_string(i) + "]";
-                if (!entry.is_object() || !entry.contains("storageKeys") ||
-                    !entry.at("storageKeys").is_array()) {
-                    invalid(
-                        entry_path, "expected address and storageKeys array");
+                auto const &address =
+                    required_field(entry, "address", entry_path);
+                auto const &storage_keys =
+                    required_field(entry, "storageKeys", entry_path);
+                if (!storage_keys.is_array()) {
+                    invalid(entry_path + ".storageKeys", "expected an array");
                 }
                 monad::AccessEntry parsed{
                     .a = fixed_hex<monad::Address>(
-                        entry.at("address"), entry_path + ".address")};
-                for (std::size_t j = 0; j < entry.at("storageKeys").size();
-                     ++j) {
+                        address, entry_path + ".address")};
+                for (std::size_t j = 0; j < storage_keys.size(); ++j) {
                     parsed.keys.push_back(fixed_hex<monad::bytes32_t>(
-                        entry.at("storageKeys").at(j),
+                        storage_keys.at(j),
                         entry_path + ".storageKeys[" + std::to_string(j) +
                             "]"));
                 }
@@ -257,19 +294,22 @@ namespace monad_execbench
             for (std::size_t i = 0; i < value.size(); ++i) {
                 auto const &entry = value.at(i);
                 auto const entry_path = path + "[" + std::to_string(i) + "]";
-                if (!entry.is_object() || !entry.contains("topics") ||
-                    !entry.at("topics").is_array()) {
-                    invalid(
-                        entry_path, "expected address, data, and topics array");
+                auto const &address =
+                    required_field(entry, "address", entry_path);
+                auto const &data = required_field(entry, "data", entry_path);
+                auto const &topics =
+                    required_field(entry, "topics", entry_path);
+                if (!topics.is_array()) {
+                    invalid(entry_path + ".topics", "expected an array");
                 }
                 monad::Receipt::Log log{
-                    .data = bytes(entry.at("data"), entry_path + ".data"),
+                    .data = bytes(data, entry_path + ".data"),
                     .topics = {},
                     .address = fixed_hex<monad::Address>(
-                        entry.at("address"), entry_path + ".address")};
-                for (std::size_t j = 0; j < entry.at("topics").size(); ++j) {
+                        address, entry_path + ".address")};
+                for (std::size_t j = 0; j < topics.size(); ++j) {
                     log.topics.push_back(fixed_hex<monad::bytes32_t>(
-                        entry.at("topics").at(j),
+                        topics.at(j),
                         entry_path + ".topics[" + std::to_string(j) + "]"));
                 }
                 result.push_back(std::move(log));
@@ -339,34 +379,44 @@ namespace monad_execbench
             invalid("manifest.schema", "unsupported schema " + suite.schema);
         }
 
-        if (!manifest.contains("chain") || !manifest.at("chain").is_object()) {
+        auto const &chain = required_field(manifest, "chain", "manifest");
+        if (!chain.is_object()) {
             invalid("manifest.chain", "expected an object");
         }
-        auto const &chain = manifest.at("chain");
-        suite.chain_id = uint256(chain.at("chainId"), "manifest.chain.chainId");
+        suite.chain_id = uint256(
+            required_field(chain, "chainId", "manifest.chain"),
+            "manifest.chain.chainId");
         suite.execution_env =
             required_string(chain, "executionEnv", "manifest.chain");
 
-        if (!manifest.contains("block") || !manifest.at("block").is_object()) {
+        auto const &block = required_field(manifest, "block", "manifest");
+        if (!block.is_object()) {
             invalid("manifest.block", "expected an object");
         }
-        auto const &block = manifest.at("block");
-        suite.block.number =
-            uint64(block.at("number"), "manifest.block.number");
+        suite.block.number = uint64(
+            required_field(block, "number", "manifest.block"),
+            "manifest.block.number");
         suite.block.hash = fixed_hex<monad::bytes32_t>(
-            block.at("hash"), "manifest.block.hash");
+            required_field(block, "hash", "manifest.block"),
+            "manifest.block.hash");
         suite.block.parent_hash = fixed_hex<monad::bytes32_t>(
-            block.at("parentHash"), "manifest.block.parentHash");
-        suite.block.timestamp =
-            uint64(block.at("timestamp"), "manifest.block.timestamp");
-        suite.block.gas_limit =
-            uint64(block.at("gasLimit"), "manifest.block.gasLimit");
-        suite.block.base_fee =
-            uint256(block.at("baseFee"), "manifest.block.baseFee");
+            required_field(block, "parentHash", "manifest.block"),
+            "manifest.block.parentHash");
+        suite.block.timestamp = uint64(
+            required_field(block, "timestamp", "manifest.block"),
+            "manifest.block.timestamp");
+        suite.block.gas_limit = uint64(
+            required_field(block, "gasLimit", "manifest.block"),
+            "manifest.block.gasLimit");
+        suite.block.base_fee = uint256(
+            required_field(block, "baseFee", "manifest.block"),
+            "manifest.block.baseFee");
         suite.block.beneficiary = fixed_hex<monad::Address>(
-            block.at("beneficiary"), "manifest.block.beneficiary");
+            required_field(block, "beneficiary", "manifest.block"),
+            "manifest.block.beneficiary");
         suite.block.prev_randao = fixed_hex<monad::bytes32_t>(
-            block.at("prevRandao"), "manifest.block.prevRandao");
+            required_field(block, "prevRandao", "manifest.block"),
+            "manifest.block.prevRandao");
         if (suite.block.number > 0) {
             suite.block.block_hashes.emplace_back(
                 suite.block.number - 1, suite.block.parent_hash);
@@ -401,12 +451,11 @@ namespace monad_execbench
 
         auto const state_json = read_json(referenced_file(
             normalized_directory, manifest, "state", "state.json.zst"));
-        if (!state_json.is_object() || !state_json.contains("accounts") ||
-            !state_json.at("accounts").is_object()) {
+        auto const &accounts = required_field(state_json, "accounts", "state");
+        if (!accounts.is_object()) {
             invalid("state.accounts", "expected an object");
         }
-        for (auto const &[address_text, account] :
-             state_json.at("accounts").items()) {
+        for (auto const &[address_text, account] : accounts.items()) {
             auto const account_path = "state.accounts." + address_text;
             if (!account.is_object()) {
                 invalid(account_path, "expected an object");
@@ -415,16 +464,23 @@ namespace monad_execbench
             AccountFixture parsed{
                 .address =
                     fixed_hex<monad::Address>(address_json, account_path),
-                .balance =
-                    uint256(account.at("balance"), account_path + ".balance"),
-                .nonce = uint64(account.at("nonce"), account_path + ".nonce"),
-                .code = bytes(account.at("code"), account_path + ".code"),
+                .balance = uint256(
+                    required_field(account, "balance", account_path),
+                    account_path + ".balance"),
+                .nonce = uint64(
+                    required_field(account, "nonce", account_path),
+                    account_path + ".nonce"),
+                .code = bytes(
+                    required_field(account, "code", account_path),
+                    account_path + ".code"),
                 .code_hash = {},
-                .storage =
-                    storage(account.at("storage"), account_path + ".storage")};
+                .storage = storage(
+                    required_field(account, "storage", account_path),
+                    account_path + ".storage")};
             parsed.code_hash = monad::to_bytes(monad::keccak256(parsed.code));
             auto const declared = fixed_hex<monad::bytes32_t>(
-                account.at("codeHash"), account_path + ".codeHash");
+                required_field(account, "codeHash", account_path),
+                account_path + ".codeHash");
             if (declared != parsed.code_hash) {
                 invalid(
                     account_path + ".codeHash", "does not match runtime code");
@@ -464,27 +520,33 @@ namespace monad_execbench
         for (std::size_t i = 0; i < cases_json.size(); ++i) {
             auto const &value = cases_json.at(i);
             auto const path = "cases[" + std::to_string(i) + "]";
-            if (!value.is_object() || !value.contains("message") ||
-                !value.at("message").is_object() ||
-                !value.contains("expected") ||
-                !value.at("expected").is_object()) {
-                invalid(path, "expected name, message, and expected objects");
+            auto const &message = required_field(value, "message", path);
+            if (!message.is_object()) {
+                invalid(path + ".message", "expected an object");
             }
-            auto const &message = value.at("message");
-            auto const &expected = value.at("expected");
+            auto const &expected = required_field(value, "expected", path);
+            if (!expected.is_object()) {
+                invalid(path + ".expected", "expected an object");
+            }
             ReplayCase parsed{
                 .name = required_string(value, "name", path),
                 .message =
                     MessageFixture{
                         .sender = fixed_hex<monad::Address>(
-                            message.at("from"), path + ".message.from"),
+                            required_field(message, "from", path + ".message"),
+                            path + ".message.from"),
                         .recipient = fixed_hex<monad::Address>(
-                            message.at("to"), path + ".message.to"),
-                        .input =
-                            bytes(message.at("input"), path + ".message.input"),
+                            required_field(message, "to", path + ".message"),
+                            path + ".message.to"),
+                        .input = bytes(
+                            required_field(message, "input", path + ".message"),
+                            path + ".message.input"),
                         .value = uint256(
-                            message.at("value"), path + ".message.value"),
-                        .gas = uint64(message.at("gas"), path + ".message.gas"),
+                            required_field(message, "value", path + ".message"),
+                            path + ".message.value"),
+                        .gas = uint64(
+                            required_field(message, "gas", path + ".message"),
+                            path + ".message.gas"),
                         .gas_price = message.contains("gasPrice")
                                          ? uint256(
                                                message.at("gasPrice"),
@@ -498,10 +560,12 @@ namespace monad_execbench
                 .expected = ExpectedResult{
                     .status =
                         required_string(expected, "status", path + ".expected"),
-                    .output =
-                        bytes(expected.at("output"), path + ".expected.output"),
+                    .output = bytes(
+                        required_field(expected, "output", path + ".expected"),
+                        path + ".expected.output"),
                     .gas_used = uint64(
-                        expected.at("gasUsed"), path + ".expected.gasUsed"),
+                        required_field(expected, "gasUsed", path + ".expected"),
+                        path + ".expected.gasUsed"),
                     .logs =
                         expected.contains("logs")
                             ? std::make_optional(logs(
