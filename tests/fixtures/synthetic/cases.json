@@ -112,7 +112,7 @@
     "expected": {
       "status": "success",
       "output": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "gasUsed": "0",
+      "gasUsed": "33",
       "logs": []
     }
   }
