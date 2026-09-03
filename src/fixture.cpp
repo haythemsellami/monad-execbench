@@ -211,6 +211,17 @@ namespace monad_execbench
             return result;
         }
 
+        std::uint64_t message_gas(json const &value, std::string const &path)
+        {
+            auto const result = uint64(value, path);
+            if (result >
+                static_cast<std::uint64_t>(
+                    std::numeric_limits<std::int64_t>::max())) {
+                invalid(path, "exceeds the EVMC signed gas range");
+            }
+            return result;
+        }
+
         std::filesystem::path referenced_file(
             std::filesystem::path const &directory, json const &manifest,
             char const *key, char const *default_name)
@@ -546,7 +557,7 @@ namespace monad_execbench
                             *required_field(
                                 message, "value", path + ".message"),
                             path + ".message.value"),
-                        .gas = uint64(
+                        .gas = message_gas(
                             *required_field(message, "gas", path + ".message"),
                             path + ".message.gas"),
                         .gas_price = message.contains("gasPrice")

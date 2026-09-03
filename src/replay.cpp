@@ -29,12 +29,14 @@
 #include <algorithm>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace monad_execbench
@@ -502,6 +504,14 @@ namespace monad_execbench
             }
             state.access_account(replay_case.message.recipient);
 
+            if (replay_case.message.gas >
+                static_cast<std::uint64_t>(
+                    std::numeric_limits<std::int64_t>::max())) {
+                throw std::runtime_error{
+                    "case " + replay_case.name +
+                    ": gas limit exceeds the EVMC signed gas range"};
+            }
+
             auto message_memory = vm.message_memory_ref();
             evmc_message message{
                 .kind = EVMC_CALL,
@@ -531,6 +541,13 @@ namespace monad_execbench
 
             auto const result = monad::execute_call_message<Traits>(
                 &replay_host.host, state, message);
+            if (result.gas_left < 0 || result.gas_left > message.gas) {
+                throw std::runtime_error{
+                    "case " + replay_case.name +
+                    ": execution returned gas_left outside the valid range"};
+            }
+            auto const gas_left =
+                static_cast<std::uint64_t>(result.gas_left);
             auto output_bytes = monad::byte_string{};
             if (result.output_size != 0) {
                 output_bytes.assign(
@@ -540,8 +557,7 @@ namespace monad_execbench
             ReplayResult replay_result{
                 .status = result.status_code,
                 .output = std::move(output_bytes),
-                .gas_used = replay_case.message.gas -
-                            static_cast<std::uint64_t>(result.gas_left),
+                .gas_used = replay_case.message.gas - gas_left,
                 .logs = {state.logs().begin(), state.logs().end()},
                 .failures = {}};
 

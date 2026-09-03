@@ -30,7 +30,7 @@ function(expect_fixture_failure expected)
   endif()
 endfunction()
 
-string(REPLACE "    \"chainId\": 143,\n" "" missing_chain_id "${manifest}")
+string(JSON missing_chain_id REMOVE "${manifest}" chain chainId)
 file(WRITE "${fixture_dir}/manifest.json" "${missing_chain_id}")
 expect_fixture_failure(
   "invalid fixture at manifest.chain.chainId: missing required field")
@@ -54,6 +54,14 @@ string(
 file(WRITE "${fixture_dir}/cases.json" "${missing_log_data}")
 expect_fixture_failure(
   "invalid fixture at cases[0].expected.logs[0].data: missing required field")
+
+file(WRITE "${fixture_dir}/cases.json" "${cases}")
+string(
+  JSON excessive_message_gas
+  SET "${cases}" 0 message gas "\"9223372036854775808\"")
+file(WRITE "${fixture_dir}/cases.json" "${excessive_message_gas}")
+expect_fixture_failure(
+  "invalid fixture at cases[0].message.gas: exceeds the EVMC signed gas range")
 
 file(WRITE "${fixture_dir}/cases.json" "${cases}")
 find_program(truncate_executable truncate REQUIRED)
