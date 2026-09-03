@@ -129,9 +129,13 @@ namespace monad_execbench
 
         monad::uint256_t uint256(json const &value, std::string const &path)
         {
+            if (value.is_number_unsigned()) {
+                return monad::uint256_t{value.get<std::uint64_t>()};
+            }
             if (!value.is_string()) {
                 invalid(
-                    path, "expected a decimal or 0x-prefixed integer string");
+                    path,
+                    "expected an unsigned integer or decimal/0x-prefixed integer string");
             }
             try {
                 return monad::from_string<monad::uint256_t>(

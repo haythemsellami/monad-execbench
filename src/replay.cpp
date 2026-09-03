@@ -248,7 +248,11 @@ namespace monad_execbench
         {
             BlockFixture const &block_;
             mutable std::vector<std::string> missing_{};
-            monad::bytes32_t zero_{};
+            monad::bytes32_t missing_hash_{[] {
+                monad::bytes32_t value{};
+                value.bytes[31] = 1;
+                return value;
+            }()};
 
         public:
             explicit FixtureBlockHashBuffer(BlockFixture const &block)
@@ -279,7 +283,7 @@ namespace monad_execbench
                     })) {
                     missing_.push_back(message);
                 }
-                return zero_;
+                return missing_hash_;
             }
 
             std::vector<std::string> const &missing() const
@@ -350,14 +354,22 @@ namespace monad_execbench
 
         struct ReplayHost
         {
+            using AddressSet =
+                ankerl::unordered_dense::segmented_set<monad::Address>;
+
+            static AddressSet const &empty_sender_set()
+            {
+                static AddressSet const empty{};
+                return empty;
+            }
+
             monad::NoopCallTracer call_tracer{};
             monad::trace::StateTracer state_tracer{std::monostate{}};
             evmc_tx_context tx_context{};
             std::vector<monad::Address> senders{};
             std::vector<std::vector<std::optional<monad::Address>>>
                 authorities{};
-            ankerl::unordered_dense::segmented_set<monad::Address>
-                senders_and_authorities{};
+            AddressSet senders_and_authorities{};
             monad::ChainContext<Traits> chain_context;
             monad::EvmcHost<Traits> host;
 
@@ -375,7 +387,7 @@ namespace monad_execbench
                 , senders_and_authorities{monad::
                                               combine_senders_and_authorities(
                                                   senders, authorities)}
-                , chain_context{.grandparent_senders_and_authorities = senders_and_authorities, .parent_senders_and_authorities = senders_and_authorities, .senders_and_authorities = senders_and_authorities, .senders = senders, .authorities = authorities}
+                , chain_context{.grandparent_senders_and_authorities = empty_sender_set(), .parent_senders_and_authorities = empty_sender_set(), .senders_and_authorities = senders_and_authorities, .senders = senders, .authorities = authorities}
                 , host{
                       call_tracer,
                       state_tracer,
