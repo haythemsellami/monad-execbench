@@ -36,9 +36,10 @@ add_subdirectory(
   "${CMAKE_CURRENT_BINARY_DIR}/third_party/monad"
   EXCLUDE_FROM_ALL)
 
-add_executable(monad-execbench src/main.cpp)
+add_executable(monad-execbench src/fixture.cpp src/main.cpp)
 
 target_compile_features(monad-execbench PRIVATE cxx_std_23)
+target_include_directories(monad-execbench PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_compile_options(monad-execbench PRIVATE -Wall -Wextra -Wconversion -Werror)
 target_compile_definitions(
   monad-execbench
@@ -46,7 +47,8 @@ target_compile_definitions(
           MONAD_EXECBENCH_MONAD_COMMIT="${MONAD_EXECBENCH_MONAD_COMMIT}")
 target_link_libraries(
   monad-execbench
-  PRIVATE evmc::mocked_host
+  PRIVATE PkgConfig::zstd
+          evmc::mocked_host
           monad_execution)
 
 include(CTest)
