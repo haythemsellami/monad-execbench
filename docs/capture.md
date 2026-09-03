@@ -102,3 +102,15 @@ fixture is suitable for benchmarking.
 .venv/bin/ruff check capture tests/capture
 .venv/bin/ruff format --check capture tests/capture
 ```
+
+When a Monad-enabled Anvil and the C++ runner are available on the same Linux
+host, run the live capture-to-replay integration test:
+
+```bash
+.venv/bin/python tests/capture/anvil_roundtrip.py \
+  --verifier ./build/monad-execbench
+```
+
+The integration test covers a successful nested call, state read inside a
+reverted child frame, a storage write, a root revert with data, and an emitted
+log. The generated fixture is then verified in both VM modes.
