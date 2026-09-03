@@ -546,8 +546,7 @@ namespace monad_execbench
                     "case " + replay_case.name +
                     ": execution returned gas_left outside the valid range"};
             }
-            auto const gas_left =
-                static_cast<std::uint64_t>(result.gas_left);
+            auto const gas_left = static_cast<std::uint64_t>(result.gas_left);
             auto output_bytes = monad::byte_string{};
             if (result.output_size != 0) {
                 output_bytes.assign(

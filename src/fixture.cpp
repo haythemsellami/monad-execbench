@@ -214,9 +214,8 @@ namespace monad_execbench
         std::uint64_t message_gas(json const &value, std::string const &path)
         {
             auto const result = uint64(value, path);
-            if (result >
-                static_cast<std::uint64_t>(
-                    std::numeric_limits<std::int64_t>::max())) {
+            if (result > static_cast<std::uint64_t>(
+                             std::numeric_limits<std::int64_t>::max())) {
                 invalid(path, "exceeds the EVMC signed gas range");
             }
             return result;
