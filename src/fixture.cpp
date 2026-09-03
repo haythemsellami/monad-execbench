@@ -451,8 +451,7 @@ namespace monad_execbench
 
         auto const state_json = read_json(referenced_file(
             normalized_directory, manifest, "state", "state.json.zst"));
-        auto const &accounts =
-            *required_field(state_json, "accounts", "state");
+        auto const &accounts = *required_field(state_json, "accounts", "state");
         if (!accounts.is_object()) {
             invalid("state.accounts", "expected an object");
         }
@@ -564,8 +563,7 @@ namespace monad_execbench
                     .status =
                         required_string(expected, "status", path + ".expected"),
                     .output = bytes(
-                        *required_field(
-                            expected, "output", path + ".expected"),
+                        *required_field(expected, "output", path + ".expected"),
                         path + ".expected.output"),
                     .gas_used = uint64(
                         *required_field(
