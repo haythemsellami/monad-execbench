@@ -1,0 +1,14 @@
+/build/
+/cmake-build-*/
+/.cache/
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
+/fixtures/generated/
+/results/
+*.data
+*.perf
+
