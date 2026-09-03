@@ -104,7 +104,7 @@ namespace monad_execbench
         }
 
         json const &required_field(
-            json const &object, char const *key, std::string const &path)
+            json const &object, char const *key, std::string path)
         {
             if (!object.is_object()) {
                 invalid(path, "expected an object");
