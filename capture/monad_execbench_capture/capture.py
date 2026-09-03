@@ -122,12 +122,19 @@ def require_list(value: Any, path: str) -> list[Any]:
     return value
 
 
+def reject_unknown_keys(value: Mapping[str, Any], allowed: set[str], path: str) -> None:
+    unknown = sorted(set(value) - allowed)
+    if unknown:
+        raise CaptureError(f"{path}: unknown field {unknown[0]!r}")
+
+
 def load_calls_document(raw: bytes) -> dict[str, Any]:
     try:
         document = json.loads(raw)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise CaptureError(f"calls manifest is not valid JSON: {error}") from error
     manifest = require_mapping(document, "calls")
+    reject_unknown_keys(manifest, {"schema", "cases"}, "calls")
     if manifest.get("schema") != CALLS_SCHEMA:
         raise CaptureError(
             f"calls.schema: expected {CALLS_SCHEMA!r}, got {manifest.get('schema')!r}"
@@ -144,6 +151,7 @@ def normalize_access_list(value: Any, path: str) -> list[dict[str, Any]]:
     for index, raw_entry in enumerate(entries):
         entry_path = f"{path}[{index}]"
         entry = require_mapping(raw_entry, entry_path)
+        reject_unknown_keys(entry, {"address", "storageKeys"}, entry_path)
         address = normalize_address(entry.get("address"), f"{entry_path}.address")
         keys = require_list(entry.get("storageKeys"), f"{entry_path}.storageKeys")
         result.append(
@@ -163,6 +171,11 @@ def normalize_call(
 ) -> tuple[str, dict[str, Any]]:
     path = f"calls.cases[{index}]"
     case = require_mapping(raw_case, path)
+    reject_unknown_keys(
+        case,
+        {"name", "from", "to", "input", "value", "gas", "gasPrice", "accessList"},
+        path,
+    )
     name = case.get("name")
     if not isinstance(name, str) or not name:
         raise CaptureError(f"{path}.name: expected a non-empty string")

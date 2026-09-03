@@ -38,6 +38,11 @@ The input is a JSON document using `monad-execbench/calls-v1`:
 }
 ```
 
+The machine-readable schema is
+[`capture/schema/calls-v1.json`](../capture/schema/calls-v1.json). Unknown
+fields are rejected so misspelled call parameters cannot silently change a
+capture.
+
 `input`, `value`, `gasPrice`, and `accessList` are optional. They default to
 `0x`, zero, the selected block base fee, and an empty array. An explicit
 `gasPrice` must be at least the block base fee. `gas` defaults to the selected

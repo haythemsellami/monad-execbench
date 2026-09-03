@@ -95,6 +95,21 @@ class CaptureTest(unittest.TestCase):
         with self.assertRaisesRegex(CaptureError, "calls.schema"):
             load_calls_document(b'{"schema":"wrong","cases":[]}')
 
+    def test_capture_rejects_unknown_case_fields(self) -> None:
+        calls = {
+            "schema": CALLS_SCHEMA,
+            "cases": [
+                {
+                    "name": "example/typo",
+                    "from": SENDER,
+                    "to": TARGET,
+                    "data": "0x",
+                }
+            ],
+        }
+        with self.assertRaisesRegex(CaptureError, "unknown field 'data'"):
+            capture_suite(FakeRpc(), calls)
+
     def test_derive_execution_gas_removes_intrinsic_gas(self) -> None:
         self.assertEqual(
             derive_execution_gas(
