@@ -33,6 +33,10 @@ namespace
 
     std::string to_hex(std::uint8_t const *data, std::size_t const size)
     {
+        if (data == nullptr) {
+            return size == 0 ? "0x" : "<null output with nonzero size>";
+        }
+
         std::ostringstream output;
         output << "0x" << std::hex << std::setfill('0');
         for (std::size_t i = 0; i < size; ++i) {
