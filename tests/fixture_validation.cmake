@@ -10,6 +10,7 @@ file(MAKE_DIRECTORY "${fixture_dir}")
 file(COPY "${source_fixture}/" DESTINATION "${fixture_dir}")
 file(READ "${fixture_dir}/manifest.json" manifest)
 file(READ "${fixture_dir}/cases.json" cases)
+file(READ "${fixture_dir}/provenance.json" provenance)
 
 function(expect_fixture_failure expected)
   execute_process(
@@ -46,6 +47,22 @@ expect_fixture_failure(
   "invalid fixture at cases[0].message.accessList[0].address: missing required field")
 
 file(WRITE "${fixture_dir}/cases.json" "${cases}")
+string(REPLACE "synthetic" "tampered" tampered_cases "${cases}")
+file(WRITE "${fixture_dir}/cases.json" "${tampered_cases}")
+expect_fixture_failure(
+  "invalid fixture at provenance.files.cases.json: does not match fixture content")
+
+file(WRITE "${fixture_dir}/cases.json" "${cases}")
+string(
+  REPLACE "aae93c5352510f09640733e58159201d3cbad063"
+          "0000000000000000000000000000000000000000"
+          wrong_monad_commit
+          "${provenance}")
+file(WRITE "${fixture_dir}/provenance.json" "${wrong_monad_commit}")
+expect_fixture_failure(
+  "invalid fixture at provenance.monadCommit: does not match runner Monad commit")
+
+file(WRITE "${fixture_dir}/provenance.json" "${provenance}")
 string(
   REPLACE "\"logs\": []"
           "\"logs\": [{\"address\": \"0x2000000000000000000000000000000000000001\", \"topics\": []}]"

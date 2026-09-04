@@ -102,6 +102,10 @@ Any account that execution probes and finds nonexistent must appear in
       "gasPrice": "0",
       "accessList": []
     },
+    "metadata": {
+      "labels": { "implementation": "implementation-a" },
+      "counters": { "amount_in": "10000000" }
+    },
     "expected": {
       "status": "success",
       "output": "0x0000000000000000000000000000000000000000000000000000000000000000",
@@ -128,12 +132,52 @@ contain any combination of `balance`, `nonce`, `code`, and `storage`.
 Each case starts from the same state file. State changes made by one case are
 not visible to another case or to the second VM mode.
 
+`metadata` is optional and does not affect execution. Label values are strings.
+Counter values are exact unsigned decimal strings; the benchmark runner also
+exports their numeric representation as Google Benchmark counters. The
+runner-owned names `execution_gas`, `return_data_bytes`, and `log_count` cannot
+be used by fixture counters.
+
 ## Provenance
 
-`provenance.json` must be a JSON object. The verifier currently preserves the
-file as a required bundle boundary but does not interpret its fields. Capture
-tooling will populate the provenance fields and content hashes defined in the
-project specification.
+`provenance.json` binds the fixture to its source block, execution environment,
+pinned Monad revision, capture tool, and content:
+
+```json
+{
+  "schema": "monad-execbench/provenance-v1",
+  "createdAt": "2026-01-01T00:00:00Z",
+  "source": {
+    "chainId": "143",
+    "blockNumber": "97663468",
+    "blockHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "executionEnv": "MONAD_TEN",
+  "monadCommit": "aae93c5352510f09640733e58159201d3cbad063",
+  "captureTool": {
+    "name": "monad-execbench-capture",
+    "version": "0.1.0"
+  },
+  "inputs": { "callsSha256": "0x..." },
+  "files": {
+    "manifest.json": "0x...",
+    "cases.json": "0x...",
+    "state.json.zst": "0x..."
+  },
+  "normalized": {
+    "manifestSha256": "0x...",
+    "casesSha256": "0x...",
+    "stateSha256": "0x...",
+    "bundleSha256": "0x..."
+  }
+}
+```
+
+The verifier requires the source chain, block, and environment to match the
+manifest; requires `monadCommit` to match the runner's pinned submodule; hashes
+all three payload files; hashes the decompressed canonical state; and recomputes
+the bundle digest. A modified, partially replaced, or differently pinned
+fixture is rejected before execution.
 
 ## Verification behavior
 
@@ -146,6 +190,7 @@ Verification fails on:
 
 - Invalid schema or malformed fixed-width values.
 - Runtime bytecode that does not match its declared code hash.
+- Provenance, pinned-commit, or fixture-content hash mismatch.
 - Status, output, execution-gas, log, or selected post-state mismatch.
 - A difference between interpreter and dual-mode results.
 - Any uncaptured account, runtime code, storage slot, or requested block hash.

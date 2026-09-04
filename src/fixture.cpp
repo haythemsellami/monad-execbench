@@ -1,4 +1,5 @@
 #include <monad-execbench/fixture.hpp>
+#include <monad-execbench/hash.hpp>
 
 #include <category/core/hex.hpp>
 #include <category/core/keccak.hpp>
@@ -8,6 +9,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cmath>
 #include <fstream>
 #include <limits>
 #include <stdexcept>
@@ -29,7 +31,10 @@ namespace monad_execbench
                 "invalid fixture at " + path + ": " + message};
         }
 
-        json read_json(std::filesystem::path const &path)
+        json read_json(
+            std::filesystem::path const &path,
+            std::string *encoded_payload = nullptr,
+            std::string *decoded_payload = nullptr)
         {
             std::error_code file_size_error;
             auto const file_size =
@@ -59,6 +64,9 @@ namespace monad_execbench
                 input.peek() != std::ifstream::traits_type::eof()) {
                 throw std::runtime_error{
                     "fixture file changed while reading: " + path.string()};
+            }
+            if (encoded_payload != nullptr) {
+                *encoded_payload = payload;
             }
             if (path.extension() == ".zst") {
                 auto const size =
@@ -91,6 +99,9 @@ namespace monad_execbench
                         ": " + ZSTD_getErrorName(result)};
                 }
                 payload = std::move(decompressed);
+            }
+            if (decoded_payload != nullptr) {
+                *decoded_payload = payload;
             }
 
             try {
@@ -369,6 +380,276 @@ namespace monad_execbench
             }
             return result;
         }
+
+        bool valid_metadata_key(std::string const &key)
+        {
+            if (key.empty() || key.size() > 64) {
+                return false;
+            }
+            auto const name_start = [](unsigned char character) {
+                return character == '_' ||
+                       (character >= 'a' && character <= 'z') ||
+                       (character >= 'A' && character <= 'Z');
+            };
+            if (!name_start(static_cast<unsigned char>(key.front()))) {
+                return false;
+            }
+            return std::all_of(
+                key.begin() + 1,
+                key.end(),
+                [&name_start](unsigned char character) {
+                    return name_start(character) ||
+                           (character >= '0' && character <= '9') ||
+                           character == '.' || character == '-';
+                });
+        }
+
+        void
+        validate_metadata_key(std::string const &key, std::string const &path)
+        {
+            if (!valid_metadata_key(key)) {
+                invalid(path, "must match [A-Za-z_][A-Za-z0-9_.-]{0,63}");
+            }
+        }
+
+        CaseMetadata metadata(json const &value, std::string const &path)
+        {
+            if (!value.is_object()) {
+                invalid(path, "expected an object");
+            }
+            CaseMetadata result;
+            if (value.contains("labels")) {
+                auto const &labels = value.at("labels");
+                if (!labels.is_object() || labels.empty()) {
+                    invalid(path + ".labels", "expected a non-empty object");
+                }
+                for (auto const &[key, label] : labels.items()) {
+                    validate_metadata_key(key, path + ".labels key");
+                    if (!label.is_string()) {
+                        invalid(path + ".labels." + key, "expected a string");
+                    }
+                    result.labels.emplace_back(key, label.get<std::string>());
+                }
+            }
+            if (value.contains("counters")) {
+                auto const &counters = value.at("counters");
+                if (!counters.is_object() || counters.empty()) {
+                    invalid(path + ".counters", "expected a non-empty object");
+                }
+                for (auto const &[key, counter] : counters.items()) {
+                    validate_metadata_key(key, path + ".counters key");
+                    if (key == "execution_gas" || key == "return_data_bytes" ||
+                        key == "log_count") {
+                        invalid(
+                            path + ".counters." + key,
+                            "counter name is reserved");
+                    }
+                    std::string exact_value;
+                    if (counter.is_number_unsigned()) {
+                        exact_value =
+                            std::to_string(counter.get<std::uint64_t>());
+                    }
+                    else if (counter.is_string()) {
+                        exact_value = counter.get<std::string>();
+                        if (exact_value.empty() ||
+                            !std::all_of(
+                                exact_value.begin(),
+                                exact_value.end(),
+                                [](unsigned char character) {
+                                    return character >= '0' && character <= '9';
+                                })) {
+                            invalid(
+                                path + ".counters." + key,
+                                "expected a decimal unsigned integer");
+                        }
+                    }
+                    else {
+                        invalid(
+                            path + ".counters." + key,
+                            "expected an unsigned integer or decimal string");
+                    }
+                    (void)uint256(counter, path + ".counters." + key);
+                    double benchmark_value{};
+                    try {
+                        benchmark_value = std::stod(exact_value);
+                    }
+                    catch (std::exception const &) {
+                        invalid(
+                            path + ".counters." + key,
+                            "cannot represent counter for benchmarking");
+                    }
+                    if (!std::isfinite(benchmark_value)) {
+                        invalid(
+                            path + ".counters." + key,
+                            "cannot represent counter for benchmarking");
+                    }
+                    result.counters.push_back(CaseCounter{
+                        .name = key,
+                        .exact_value = std::move(exact_value),
+                        .benchmark_value = benchmark_value});
+                }
+            }
+            if (result.labels.empty() && result.counters.empty()) {
+                invalid(path, "expected at least one label or counter");
+            }
+            for (auto const &[key, ignored] : value.items()) {
+                (void)ignored;
+                if (key != "labels" && key != "counters") {
+                    invalid(path + "." + key, "unknown field");
+                }
+            }
+            return result;
+        }
+
+        std::string required_sha256(
+            json const &object, char const *key, std::string const &path)
+        {
+            auto const result = required_string(object, key, path);
+            if (result.size() != 66 || !result.starts_with("0x") ||
+                !std::all_of(
+                    result.begin() + 2,
+                    result.end(),
+                    [](unsigned char character) {
+                        return (character >= '0' && character <= '9') ||
+                               (character >= 'a' && character <= 'f');
+                    })) {
+                invalid(
+                    path + "." + key,
+                    "expected a lowercase 0x-prefixed SHA-256 digest");
+            }
+            return result;
+        }
+
+        void require_matching_hash(
+            json const &object, char const *key, std::string const &actual,
+            std::string const &path)
+        {
+            auto const declared = required_sha256(object, key, path);
+            if (declared != actual) {
+                invalid(path + "." + key, "does not match fixture content");
+            }
+        }
+
+        FixtureProvenance validate_provenance(
+            json const &value, FixtureSuite const &suite,
+            std::string const &manifest_payload,
+            std::string const &cases_payload,
+            std::string const &state_file_payload,
+            std::string const &state_payload, std::string const &cases_name,
+            std::string const &state_name)
+        {
+            if (!value.is_object()) {
+                invalid("provenance", "expected an object");
+            }
+            FixtureProvenance result{
+                .schema = required_string(value, "schema", "provenance"),
+                .created_at = required_string(value, "createdAt", "provenance"),
+                .monad_commit =
+                    required_string(value, "monadCommit", "provenance")};
+            if (result.schema != provenance_schema_v1) {
+                invalid(
+                    "provenance.schema", "unsupported schema " + result.schema);
+            }
+            if (result.created_at.empty()) {
+                invalid("provenance.createdAt", "must not be empty");
+            }
+            if (result.monad_commit != MONAD_EXECBENCH_MONAD_COMMIT) {
+                invalid(
+                    "provenance.monadCommit",
+                    "does not match runner Monad commit " +
+                        std::string{MONAD_EXECBENCH_MONAD_COMMIT});
+            }
+
+            auto const &source = *required_field(value, "source", "provenance");
+            if (uint256(
+                    *required_field(source, "chainId", "provenance.source"),
+                    "provenance.source.chainId") != suite.chain_id) {
+                invalid(
+                    "provenance.source.chainId",
+                    "does not match manifest chain ID");
+            }
+            if (uint64(
+                    *required_field(source, "blockNumber", "provenance.source"),
+                    "provenance.source.blockNumber") != suite.block.number) {
+                invalid(
+                    "provenance.source.blockNumber",
+                    "does not match manifest block number");
+            }
+            if (fixed_hex<monad::bytes32_t>(
+                    *required_field(source, "blockHash", "provenance.source"),
+                    "provenance.source.blockHash") != suite.block.hash) {
+                invalid(
+                    "provenance.source.blockHash",
+                    "does not match manifest block hash");
+            }
+            if (required_string(value, "executionEnv", "provenance") !=
+                suite.execution_env) {
+                invalid(
+                    "provenance.executionEnv",
+                    "does not match manifest execution environment");
+            }
+
+            auto const &capture_tool =
+                *required_field(value, "captureTool", "provenance");
+            result.capture_tool =
+                required_string(capture_tool, "name", "provenance.captureTool");
+            result.capture_version = required_string(
+                capture_tool, "version", "provenance.captureTool");
+            if (result.capture_tool.empty() || result.capture_version.empty()) {
+                invalid(
+                    "provenance.captureTool",
+                    "name and version must not be empty");
+            }
+
+            result.manifest_sha256 = sha256_hex(manifest_payload);
+            result.cases_sha256 = sha256_hex(cases_payload);
+            result.state_file_sha256 = sha256_hex(state_file_payload);
+            result.normalized_state_sha256 = sha256_hex(state_payload);
+            result.bundle_sha256 = sha256_hex(
+                result.manifest_sha256 + result.cases_sha256 +
+                result.normalized_state_sha256);
+
+            auto const &files = *required_field(value, "files", "provenance");
+            require_matching_hash(
+                files,
+                "manifest.json",
+                result.manifest_sha256,
+                "provenance.files");
+            require_matching_hash(
+                files,
+                cases_name.c_str(),
+                result.cases_sha256,
+                "provenance.files");
+            require_matching_hash(
+                files,
+                state_name.c_str(),
+                result.state_file_sha256,
+                "provenance.files");
+
+            auto const &normalized =
+                *required_field(value, "normalized", "provenance");
+            require_matching_hash(
+                normalized,
+                "manifestSha256",
+                result.manifest_sha256,
+                "provenance.normalized");
+            require_matching_hash(
+                normalized,
+                "casesSha256",
+                result.cases_sha256,
+                "provenance.normalized");
+            require_matching_hash(
+                normalized,
+                "stateSha256",
+                result.normalized_state_sha256,
+                "provenance.normalized");
+            require_matching_hash(
+                normalized,
+                "bundleSha256",
+                result.bundle_sha256,
+                "provenance.normalized");
+            return result;
+        }
     }
 
     FixtureSuite load_fixture_suite(std::filesystem::path const &directory)
@@ -381,7 +662,9 @@ namespace monad_execbench
                 normalized_directory.string()};
         }
 
-        auto const manifest = read_json(normalized_directory / "manifest.json");
+        std::string manifest_payload;
+        auto const manifest = read_json(
+            normalized_directory / "manifest.json", &manifest_payload);
         FixtureSuite suite{
             .directory = normalized_directory,
             .schema = required_string(manifest, "schema", "manifest")};
@@ -459,8 +742,15 @@ namespace monad_execbench
             }
         }
 
-        auto const state_json = read_json(referenced_file(
-            normalized_directory, manifest, "state", "state.json.zst"));
+        auto const state_path = referenced_file(
+            normalized_directory, manifest, "state", "state.json.zst");
+        auto const state_name =
+            state_path.lexically_relative(normalized_directory)
+                .generic_string();
+        std::string state_file_payload;
+        std::string state_payload;
+        auto const state_json =
+            read_json(state_path, &state_file_payload, &state_payload);
         auto const &accounts = *required_field(state_json, "accounts", "state");
         if (!accounts.is_object()) {
             invalid("state.accounts", "expected an object");
@@ -522,8 +812,13 @@ namespace monad_execbench
             }
         }
 
-        auto const cases_json = read_json(referenced_file(
-            normalized_directory, manifest, "cases", "cases.json"));
+        auto const cases_path = referenced_file(
+            normalized_directory, manifest, "cases", "cases.json");
+        auto const cases_name =
+            cases_path.lexically_relative(normalized_directory)
+                .generic_string();
+        std::string cases_payload;
+        auto const cases_json = read_json(cases_path, &cases_payload);
         if (!cases_json.is_array() || cases_json.empty()) {
             invalid("cases", "expected a non-empty array");
         }
@@ -569,26 +864,32 @@ namespace monad_execbench
                                                  message.at("accessList"),
                                                  path + ".message.accessList")
                                            : monad::AccessList{}},
-                .expected = ExpectedResult{
-                    .status =
-                        required_string(expected, "status", path + ".expected"),
-                    .output = bytes(
-                        *required_field(expected, "output", path + ".expected"),
-                        path + ".expected.output"),
-                    .gas_used = uint64(
-                        *required_field(
-                            expected, "gasUsed", path + ".expected"),
-                        path + ".expected.gasUsed"),
-                    .logs =
-                        expected.contains("logs")
-                            ? std::make_optional(logs(
-                                  expected.at("logs"), path + ".expected.logs"))
-                            : std::nullopt,
-                    .state = expected.contains("state")
-                                 ? expected_state(
-                                       expected.at("state"),
-                                       path + ".expected.state")
-                                 : std::vector<ExpectedAccount>{}}};
+                .expected =
+                    ExpectedResult{
+                        .status = required_string(
+                            expected, "status", path + ".expected"),
+                        .output = bytes(
+                            *required_field(
+                                expected, "output", path + ".expected"),
+                            path + ".expected.output"),
+                        .gas_used = uint64(
+                            *required_field(
+                                expected, "gasUsed", path + ".expected"),
+                            path + ".expected.gasUsed"),
+                        .logs = expected.contains("logs")
+                                    ? std::make_optional(logs(
+                                          expected.at("logs"),
+                                          path + ".expected.logs"))
+                                    : std::nullopt,
+                        .state = expected.contains("state")
+                                     ? expected_state(
+                                           expected.at("state"),
+                                           path + ".expected.state")
+                                     : std::vector<ExpectedAccount>{}},
+                .metadata =
+                    value.contains("metadata")
+                        ? metadata(value.at("metadata"), path + ".metadata")
+                        : CaseMetadata{}};
             if (parsed.name.empty()) {
                 invalid(path + ".name", "must not be empty");
             }
@@ -623,9 +924,15 @@ namespace monad_execbench
 
         auto const provenance_path = normalized_directory / "provenance.json";
         auto const provenance = read_json(provenance_path);
-        if (!provenance.is_object()) {
-            invalid("provenance", "expected an object");
-        }
+        suite.provenance = validate_provenance(
+            provenance,
+            suite,
+            manifest_payload,
+            cases_payload,
+            state_file_payload,
+            state_payload,
+            cases_name,
+            state_name);
 
         return suite;
     }

@@ -22,6 +22,8 @@ EMPTY_STORAGE_ROOT = (
     "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
 )
 EVMC_MAX_GAS = (1 << 63) - 1
+METADATA_KEY_MAX_LENGTH = 64
+RESERVED_COUNTERS = {"execution_gas", "return_data_bytes", "log_count"}
 
 
 class CaptureError(RuntimeError):
@@ -167,14 +169,73 @@ def normalize_access_list(value: Any, path: str) -> list[dict[str, Any]]:
     return result
 
 
+def normalize_metadata_key(value: Any, path: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise CaptureError(f"{path}: expected a non-empty string")
+    if len(value) > METADATA_KEY_MAX_LENGTH:
+        raise CaptureError(
+            f"{path}: must not exceed {METADATA_KEY_MAX_LENGTH} characters"
+        )
+    if not (value[0].isalpha() or value[0] == "_"):
+        raise CaptureError(f"{path}: invalid metadata key")
+    if any(
+        not (character.isascii() and (character.isalnum() or character in "_.-"))
+        for character in value[1:]
+    ):
+        raise CaptureError(f"{path}: invalid metadata key")
+    if not value[0].isascii():
+        raise CaptureError(f"{path}: invalid metadata key")
+    return value
+
+
+def normalize_metadata(value: Any, path: str) -> dict[str, Any]:
+    metadata = require_mapping(value, path)
+    reject_unknown_keys(metadata, {"labels", "counters"}, path)
+    result: dict[str, Any] = {}
+
+    labels = require_mapping(metadata.get("labels", {}), f"{path}.labels")
+    normalized_labels: dict[str, str] = {}
+    for raw_key, raw_value in labels.items():
+        key = normalize_metadata_key(raw_key, f"{path}.labels key")
+        if not isinstance(raw_value, str):
+            raise CaptureError(f"{path}.labels.{key}: expected a string")
+        normalized_labels[key] = raw_value
+    if normalized_labels:
+        result["labels"] = dict(sorted(normalized_labels.items()))
+
+    counters = require_mapping(metadata.get("counters", {}), f"{path}.counters")
+    normalized_counters: dict[str, str] = {}
+    for raw_key, raw_value in counters.items():
+        key = normalize_metadata_key(raw_key, f"{path}.counters key")
+        if key in RESERVED_COUNTERS:
+            raise CaptureError(f"{path}.counters.{key}: counter name is reserved")
+        normalized_counters[key] = decimal_quantity(raw_value, f"{path}.counters.{key}")
+    if normalized_counters:
+        result["counters"] = dict(sorted(normalized_counters.items()))
+
+    if not result:
+        raise CaptureError(f"{path}: expected at least one label or counter")
+    return result
+
+
 def normalize_call(
     raw_case: Any, index: int, block_gas_limit: int, block_base_fee: int
-) -> tuple[str, dict[str, Any]]:
+) -> tuple[str, dict[str, Any], dict[str, Any] | None]:
     path = f"calls.cases[{index}]"
     case = require_mapping(raw_case, path)
     reject_unknown_keys(
         case,
-        {"name", "from", "to", "input", "value", "gas", "gasPrice", "accessList"},
+        {
+            "name",
+            "from",
+            "to",
+            "input",
+            "value",
+            "gas",
+            "gasPrice",
+            "accessList",
+            "metadata",
+        },
         path,
     )
     name = case.get("name")
@@ -193,15 +254,24 @@ def normalize_call(
     access_list = normalize_access_list(
         case.get("accessList", []), f"{path}.accessList"
     )
-    return name, {
-        "from": sender,
-        "to": recipient,
-        "data": input_data,
-        "value": quantity(value),
-        "gas": quantity(gas),
-        "gasPrice": quantity(gas_price),
-        "accessList": access_list,
-    }
+    metadata = (
+        normalize_metadata(case["metadata"], f"{path}.metadata")
+        if "metadata" in case
+        else None
+    )
+    return (
+        name,
+        {
+            "from": sender,
+            "to": recipient,
+            "data": input_data,
+            "value": quantity(value),
+            "gas": quantity(gas),
+            "gasPrice": quantity(gas_price),
+            "accessList": access_list,
+        },
+        metadata,
+    )
 
 
 def derive_execution_gas(
@@ -355,7 +425,9 @@ def capture_suite(
     raw_cases = require_list(calls_document.get("cases"), "calls.cases")
 
     for index, raw_case in enumerate(raw_cases):
-        name, call = normalize_call(raw_case, index, block_gas_limit, base_fee)
+        name, call, metadata = normalize_call(
+            raw_case, index, block_gas_limit, base_fee
+        )
         if name in names:
             raise CaptureError(f"calls.cases[{index}].name: duplicate case {name!r}")
         names.add(name)
@@ -416,23 +488,22 @@ def capture_suite(
         state_assertion = expected_state(diff, call["from"], f"{case_path}.diff")
         if state_assertion:
             expected["state"] = state_assertion
-        captured_cases.append(
-            {
-                "name": name,
-                "message": {
-                    "from": call["from"],
-                    "to": call["to"],
-                    "input": call["data"],
-                    "value": decimal_quantity(call["value"], f"{case_path}.value"),
-                    "gas": str(execution_limit),
-                    "gasPrice": decimal_quantity(
-                        call["gasPrice"], f"{case_path}.gasPrice"
-                    ),
-                    "accessList": call["accessList"],
-                },
-                "expected": expected,
-            }
-        )
+        captured_case = {
+            "name": name,
+            "message": {
+                "from": call["from"],
+                "to": call["to"],
+                "input": call["data"],
+                "value": decimal_quantity(call["value"], f"{case_path}.value"),
+                "gas": str(execution_limit),
+                "gasPrice": decimal_quantity(call["gasPrice"], f"{case_path}.gasPrice"),
+                "accessList": call["accessList"],
+            },
+            "expected": expected,
+        }
+        if metadata is not None:
+            captured_case["metadata"] = metadata
+        captured_cases.append(captured_case)
 
     state = hydrate_state(rpc, requirements, block_tag)
     stable_block = require_mapping(
@@ -573,6 +644,10 @@ def sha256(value: bytes) -> str:
     return "0x" + hashlib.sha256(value).hexdigest()
 
 
+def bundle_sha256(*hashes: str) -> str:
+    return sha256("".join(hashes).encode())
+
+
 def write_bundle(
     output: Path,
     bundle: CaptureBundle,
@@ -599,6 +674,10 @@ def write_bundle(
     state_compressed = zstandard.ZstdCompressor(
         level=10, write_content_size=True
     ).compress(state_bytes)
+    manifest_sha256 = sha256(manifest_bytes)
+    cases_sha256 = sha256(cases_bytes)
+    state_file_sha256 = sha256(state_compressed)
+    normalized_state_sha256 = sha256(state_bytes)
     provenance = {
         "schema": PROVENANCE_SCHEMA,
         "createdAt": created_at
@@ -618,11 +697,18 @@ def write_bundle(
         },
         "inputs": {"callsSha256": sha256(calls_bytes)},
         "files": {
-            "manifest.json": sha256(manifest_bytes),
-            "cases.json": sha256(cases_bytes),
-            "state.json.zst": sha256(state_compressed),
+            "manifest.json": manifest_sha256,
+            "cases.json": cases_sha256,
+            "state.json.zst": state_file_sha256,
         },
-        "normalized": {"stateSha256": sha256(state_bytes)},
+        "normalized": {
+            "manifestSha256": manifest_sha256,
+            "casesSha256": cases_sha256,
+            "stateSha256": normalized_state_sha256,
+            "bundleSha256": bundle_sha256(
+                manifest_sha256, cases_sha256, normalized_state_sha256
+            ),
+        },
     }
 
     temporary = Path(tempfile.mkdtemp(prefix=f".{output.name}.", dir=output.parent))

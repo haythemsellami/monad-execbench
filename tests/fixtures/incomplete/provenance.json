@@ -1,4 +1,26 @@
 {
-  "kind": "negative test fixture",
-  "omission": "storage slot 0x01"
+  "schema": "monad-execbench/provenance-v1",
+  "createdAt": "2026-09-04T00:00:00Z",
+  "source": {
+    "chainId": "143",
+    "blockNumber": "100",
+    "blockHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "executionEnv": "MONAD_TEN",
+  "monadCommit": "aae93c5352510f09640733e58159201d3cbad063",
+  "captureTool": {
+    "name": "hand-authored-fixture",
+    "version": "1"
+  },
+  "files": {
+    "manifest.json": "0x603aebe5406ab3e1dce74719cb970c9d9c5aef8022dff958e92177c2f7b5aa49",
+    "cases.json": "0x5975e1d760fc5cbf85f42844afdaffac6d3ee219d042f17eefe9a3bbe9bd9ef2",
+    "state.json": "0x17d879dbdddf8660002728ee16304a4c2d510ea1be80d270bc437da695b6d5a6"
+  },
+  "normalized": {
+    "manifestSha256": "0x603aebe5406ab3e1dce74719cb970c9d9c5aef8022dff958e92177c2f7b5aa49",
+    "casesSha256": "0x5975e1d760fc5cbf85f42844afdaffac6d3ee219d042f17eefe9a3bbe9bd9ef2",
+    "stateSha256": "0x17d879dbdddf8660002728ee16304a4c2d510ea1be80d270bc437da695b6d5a6",
+    "bundleSha256": "0xe997e6590157c6726903ff8801b344b66e5debedbef508529bf4a09568e84b2b"
+  }
 }

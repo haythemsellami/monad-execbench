@@ -71,6 +71,7 @@ add_executable(
   monad-execbench
   src/benchmark.cpp
   src/fixture.cpp
+  src/hash.cpp
   src/main.cpp
   src/replay.cpp)
 
@@ -91,6 +92,7 @@ target_link_libraries(
   monad-execbench
   PRIVATE benchmark::benchmark
           evmc::mocked_host
+          monad_crypto
           monad_execution)
 
 include(CTest)
@@ -127,8 +129,8 @@ if(BUILD_TESTING)
       "-DFIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/synthetic"
       "-DBINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}"
       "-DMODE=dual-hot"
-      "-DFILTER=nested-call-storage-log"
-      "-DEXPECTED_GAS=19020"
+      "-DFILTER=return-constant"
+      "-DEXPECTED_GAS=13"
       -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/benchmark_output.cmake")
   add_test(
     NAME monad-execbench-benchmark-interpreter-hot

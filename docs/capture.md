@@ -32,7 +32,11 @@ The input is a JSON document using `monad-execbench/calls-v1`:
       "value": "0",
       "gas": "1000000",
       "gasPrice": "0",
-      "accessList": []
+      "accessList": [],
+      "metadata": {
+        "labels": { "implementation": "implementation-a" },
+        "counters": { "amount_in": "10000000" }
+      }
     }
   ]
 }
@@ -48,6 +52,13 @@ capture.
 `gasPrice` must be at least the block base fee. `gas` defaults to the selected
 block gas limit. Case names must be unique. Contract creation is not supported
 by this schema; every case requires a `to` address.
+
+`metadata` is optional. Labels are strings preserved in each benchmark's JSON
+label. Counters are unsigned quantities normalized to exact decimal strings
+and also exposed as Google Benchmark numeric counters. Metadata keys follow the
+same rules as the Foundry helper, and runner-owned counter names are rejected.
+See the [Foundry workflow](foundry.md) for generating manifests from normal
+Solidity deployment scripts.
 
 ## Capturing a fixture
 
@@ -81,6 +92,12 @@ proof responses distinguish captured zero values from missing state. The prior
 The call tracer supplies the root execution gas after transaction intrinsic
 gas. The normalized fixture therefore contains the direct-VM gas limit and gas
 used values expected by the C++ runner.
+
+The selected execution environment is an assertion about the RPC's semantics,
+not an instruction sent to the RPC. The offline verifier compares the captured
+result with the pinned C++ schedule and rejects incompatible gas or behavior.
+Review the [Foundry execution-environment setup](foundry.md#execution-environment-selection)
+before capturing `MONAD_TEN` fixtures from a local Anvil.
 
 `provenance.json` records the pinned chain and block, Monad commit, capture and
 runtime versions, the input call-manifest hash, hashes of every fixture payload,
@@ -121,6 +138,6 @@ host, run the live capture-to-replay integration test:
 ```
 
 The integration test covers a successful nested call, state read inside a
-reverted child frame, a storage write, a root revert with data, an emitted log,
-and access-list warming. The generated fixture is then verified in both VM
-modes.
+reverted child frame, direct storage reads and writes, a root revert with data,
+an emitted log, access-list warming, and case metadata. The generated fixture
+is verified in both VM modes and run through a short `dual-hot` benchmark.
