@@ -101,6 +101,20 @@ python3 -m venv .venv
 See [the capture guide](docs/capture.md) for the call-manifest schema, required
 RPC methods, and offline verification workflow.
 
+## Foundry integration
+
+Consumer projects can import [`foundry/src/ExecBench.sol`](foundry/src/ExecBench.sol)
+from a Forge script, register calls using ABI-encoded calldata, and write a
+validated call manifest for the capture utility. Cases can carry string labels
+and exact unsigned counters such as implementation names and input amounts;
+the runner preserves them in the raw benchmark JSON.
+
+The repository includes an end-to-end integration workload that deploys fresh
+contracts, writes its manifest through the helper, captures state from Anvil,
+verifies the portable fixture, and executes a short benchmark. See the
+[Foundry workflow](docs/foundry.md) for usage and execution-environment
+compatibility requirements.
+
 ## License
 
 This project is licensed under the GNU General Public License version 3.0. See [LICENSE](LICENSE).

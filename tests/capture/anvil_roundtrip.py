@@ -18,9 +18,7 @@ from monad_execbench_capture.capture import (
 )
 from monad_execbench_capture.rpc import RpcClient, RpcError
 
-ANVIL_PRIVATE_KEY = (
-    "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
-)
+ANVIL_PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 REPOSITORY = Path(__file__).resolve().parents[2]
 FOUNDRY_ROOT = REPOSITORY / "foundry"
 
@@ -119,7 +117,9 @@ def run_benchmark(verifier: Path, fixture: Path, output: Path) -> None:
 
     report = json.loads(output.read_text())
     if report["context"]["execution_env"] != "MONAD_TEN":
-        raise RuntimeError("benchmark report did not preserve the execution environment")
+        raise RuntimeError(
+            "benchmark report did not preserve the execution environment"
+        )
     iterations = [
         entry for entry in report["benchmarks"] if entry["run_type"] == "iteration"
     ]

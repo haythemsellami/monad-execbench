@@ -105,15 +105,20 @@ time-order bias.
 The report context records:
 
 - Runner version and source revision.
+- SHA-256 digest of the runner binary.
 - Pinned Monad revision.
 - Build type and compiler.
-- Fixture schema and directory.
+- Fixture schema, directory, creation time, and capture-tool version.
+- Bundle, manifest, cases, and normalized-state SHA-256 digests.
 - Execution environment, block number, and block hash.
 - Mode, case filter, repetition count, CPU topology, and benchmark-library
   version.
 
 Each case records real time, process CPU time, iterations, execution gas,
-return-data bytes, log count, and success or revert status.
+return-data bytes, log count, success or revert status, and any user-supplied
+metadata. Unsigned metadata counters appear both as benchmark counters and as
+exact decimal strings inside the JSON-encoded `label` field so values larger
+than IEEE-754's exact integer range remain reproducible.
 
 For publishable results, pin the process to a physical CPU, keep competing load
 off that core, use a stable CPU-frequency policy, retain the raw JSON, and treat
