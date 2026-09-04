@@ -14,15 +14,19 @@ The tool is split into three layers:
 
 No contract address, ABI, selector, or workload is compiled into the runner.
 
-## Monad dependency
+## Dependencies
 
-Monad execution is included as a pinned Git submodule under `third_party/monad`. Initialize all nested dependencies after cloning:
+Monad execution and Google Benchmark are included as pinned Git submodules
+under `third_party/`. Initialize all nested dependencies after cloning:
 
 ```bash
 git submodule update --init --recursive
 ```
 
 The initial integration targets `MONAD_TEN` using Monad release `v0.16.2+1` at commit `aae93c5352510f09640733e58159201d3cbad063`.
+
+Google Benchmark is pinned to release `v1.9.1`. Building it with the runner
+avoids using host packages with different optimization or assertion settings.
 
 ## Platform
 
@@ -63,8 +67,21 @@ and selected post-state. An account, runtime code, storage slot, or block hash
 read that was not captured makes verification fail.
 
 The bundle schema is documented in
-[docs/fixture-format.md](docs/fixture-format.md). Timed benchmarking is a
-planned follow-up milestone.
+[docs/fixture-format.md](docs/fixture-format.md).
+
+Run a verified production-mode benchmark and write raw JSON results:
+
+```bash
+./build/monad-execbench run path/to/fixture-suite \
+  --mode dual-hot \
+  --repetitions 50 \
+  --output results/dual-hot.json
+```
+
+The runner also supports `interpreter-hot`, case-name glob filtering, and
+selected Google Benchmark options. See the
+[direct-VM benchmarking guide](docs/benchmarking.md) for timing boundaries,
+cache semantics, result fields, and host preparation.
 
 ## Capture utility
 
