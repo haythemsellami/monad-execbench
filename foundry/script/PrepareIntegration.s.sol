@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity >=0.8.20;
 
-import { ExecBench } from "../src/ExecBench.sol";
+import { ExecBench } from "src/ExecBench.sol";
 
 interface IPrepareIntegrationVm {
     function addr(uint256 privateKey) external pure returns (address);
