@@ -587,6 +587,14 @@ namespace monad_execbench
                 }
                 state_.access_account(replay_case.message.recipient);
 
+                if (replay_case.message.gas >
+                    static_cast<std::uint64_t>(
+                        std::numeric_limits<std::int64_t>::max())) {
+                    throw std::runtime_error{
+                        "case " + replay_case.name +
+                        ": gas limit exceeds the EVMC signed gas range"};
+                }
+
                 message_ = evmc_message{
                     .kind = EVMC_CALL,
                     .flags = 0,
