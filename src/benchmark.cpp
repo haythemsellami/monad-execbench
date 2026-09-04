@@ -303,8 +303,7 @@ namespace monad_execbench
                 }
                 if (!replay_case.metadata.counters.empty()) {
                     auto &counters = label["counters"];
-                    for (auto const &counter :
-                         replay_case.metadata.counters) {
+                    for (auto const &counter : replay_case.metadata.counters) {
                         counters[counter.name] = counter.exact_value;
                     }
                 }

@@ -394,13 +394,11 @@ namespace monad_execbench
                 });
         }
 
-        void validate_metadata_key(
-            std::string const &key, std::string const &path)
+        void
+        validate_metadata_key(std::string const &key, std::string const &path)
         {
             if (!valid_metadata_key(key)) {
-                invalid(
-                    path,
-                    "must match [A-Za-z_][A-Za-z0-9_.-]{0,63}");
+                invalid(path, "must match [A-Za-z_][A-Za-z0-9_.-]{0,63}");
             }
         }
 
@@ -430,8 +428,8 @@ namespace monad_execbench
                 }
                 for (auto const &[key, counter] : counters.items()) {
                     validate_metadata_key(key, path + ".counters key");
-                    if (key == "execution_gas" ||
-                        key == "return_data_bytes" || key == "log_count") {
+                    if (key == "execution_gas" || key == "return_data_bytes" ||
+                        key == "log_count") {
                         invalid(
                             path + ".counters." + key,
                             "counter name is reserved");
@@ -448,8 +446,7 @@ namespace monad_execbench
                                 exact_value.begin(),
                                 exact_value.end(),
                                 [](unsigned char character) {
-                                    return character >= '0' &&
-                                           character <= '9';
+                                    return character >= '0' && character <= '9';
                                 })) {
                             invalid(
                                 path + ".counters." + key,
@@ -693,30 +690,32 @@ namespace monad_execbench
                                                  message.at("accessList"),
                                                  path + ".message.accessList")
                                            : monad::AccessList{}},
-                .expected = ExpectedResult{
-                    .status =
-                        required_string(expected, "status", path + ".expected"),
-                    .output = bytes(
-                        *required_field(expected, "output", path + ".expected"),
-                        path + ".expected.output"),
-                    .gas_used = uint64(
-                        *required_field(
-                            expected, "gasUsed", path + ".expected"),
-                        path + ".expected.gasUsed"),
-                    .logs =
-                        expected.contains("logs")
-                            ? std::make_optional(logs(
-                                  expected.at("logs"), path + ".expected.logs"))
-                            : std::nullopt,
-                    .state = expected.contains("state")
-                                 ? expected_state(
-                                       expected.at("state"),
-                                       path + ".expected.state")
-                                 : std::vector<ExpectedAccount>{}},
-                .metadata = value.contains("metadata")
-                                ? metadata(
-                                      value.at("metadata"), path + ".metadata")
-                                : CaseMetadata{}};
+                .expected =
+                    ExpectedResult{
+                        .status = required_string(
+                            expected, "status", path + ".expected"),
+                        .output = bytes(
+                            *required_field(
+                                expected, "output", path + ".expected"),
+                            path + ".expected.output"),
+                        .gas_used = uint64(
+                            *required_field(
+                                expected, "gasUsed", path + ".expected"),
+                            path + ".expected.gasUsed"),
+                        .logs = expected.contains("logs")
+                                    ? std::make_optional(logs(
+                                          expected.at("logs"),
+                                          path + ".expected.logs"))
+                                    : std::nullopt,
+                        .state = expected.contains("state")
+                                     ? expected_state(
+                                           expected.at("state"),
+                                           path + ".expected.state")
+                                     : std::vector<ExpectedAccount>{}},
+                .metadata =
+                    value.contains("metadata")
+                        ? metadata(value.at("metadata"), path + ".metadata")
+                        : CaseMetadata{}};
             if (parsed.name.empty()) {
                 invalid(path + ".name", "must not be empty");
             }
