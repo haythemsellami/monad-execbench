@@ -61,7 +61,7 @@ def monad_network_arguments(anvil: str) -> list[str]:
         text=True,
     ).stdout
     if "--network <NETWORK>" in help_text and "monad" in help_text:
-        return ["--network", "monad", "--hardfork", "m:MonadNext"]
+        return ["--network", "monad", "--hardfork", "MonadNext"]
     if "--monad" in help_text:
         return ["--monad"]
     raise RuntimeError(f"{anvil} does not expose Monad network support")
