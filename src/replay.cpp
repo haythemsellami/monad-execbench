@@ -462,136 +462,249 @@ namespace monad_execbench
             }
         }
 
-        ReplayResult execute_case(
-            FixtureSuite const &suite, ReplayCase const &replay_case,
-            monad::vm::VM::Mode mode)
+        monad::vm::VM::Mode vm_mode(BenchmarkMode const mode)
         {
-            auto base = build_base_state(suite);
-            ValidatingDb validating_db{base->trie_db, suite};
-            monad::vm::VM vm{mode};
-            monad::BlockState block_state{validating_db, vm};
-            monad::State state{
-                block_state, monad::Incarnation{suite.block.number, 0}};
-            auto const header = make_header(suite);
-            auto const transaction = make_transaction(replay_case);
-            monad::MonadMainnet const chain{};
-            FixtureBlockHashBuffer block_hash_buffer{suite.block};
-            ReplayHost replay_host{
-                block_hash_buffer,
-                state,
-                transaction,
-                replay_case.message.sender,
-                header,
-                suite.chain_id,
-                chain};
+            switch (mode) {
+            case BenchmarkMode::dual_hot:
+                return monad::vm::VM::Dual;
+            case BenchmarkMode::interpreter_hot:
+                return monad::vm::VM::InterpreterOnly;
+            }
+            throw std::runtime_error{"unsupported benchmark mode"};
+        }
 
-            monad::init_reserve_balance_context<Traits>(
-                state,
-                replay_case.message.sender,
-                transaction,
-                header.base_fee_per_gas,
-                0,
-                replay_host.state_tracer,
-                replay_host.chain_context);
+        void prime_code_cache(
+            monad::vm::VM &vm, FixtureSuite const &suite,
+            BenchmarkMode const mode)
+        {
+            std::vector<
+                std::pair<monad::bytes32_t, monad::vm::SharedVarcode>>
+                varcodes;
+            varcodes.reserve(suite.accounts.size());
+            for (auto const &account : suite.accounts) {
+                if (account.code.empty()) {
+                    continue;
+                }
+                varcodes.emplace_back(
+                    account.code_hash,
+                    vm.try_insert_varcode_raw(account.code_hash, account.code));
+            }
 
-            replay_host.host.access_account(header.beneficiary);
-            state.access_account(replay_case.message.sender);
-            for (auto const &entry : transaction.access_list) {
-                state.access_account(entry.a);
-                for (auto const &key : entry.keys) {
-                    state.access_storage<Traits>(entry.a, key);
+            if (mode == BenchmarkMode::dual_hot) {
+                for (auto const &[code_hash, varcode] : varcodes) {
+                    (void)vm.compiler().cached_compile<Traits>(
+                        code_hash, varcode->intercode(), vm.compiler_config());
                 }
             }
-            state.access_account(replay_case.message.recipient);
+            else {
+                for (auto const &[code_hash, varcode] : varcodes) {
+                    (void)vm.compiler().async_compile<Traits>(
+                        code_hash, varcode->intercode(), vm.compiler_config());
+                }
+                vm.compiler().debug_wait_for_empty_queue();
+            }
+        }
 
-            if (replay_case.message.gas >
-                static_cast<std::uint64_t>(
-                    std::numeric_limits<std::int64_t>::max())) {
-                throw std::runtime_error{
-                    "case " + replay_case.name +
-                    ": gas limit exceeds the EVMC signed gas range"};
+        struct ExecutionSession
+        {
+            std::unique_ptr<BaseState> base;
+            monad::vm::VM vm;
+
+            ExecutionSession(
+                FixtureSuite const &suite, BenchmarkMode const mode)
+                : base{build_base_state(suite)}
+                , vm{vm_mode(mode)}
+            {
+                prime_code_cache(vm, suite, mode);
+            }
+        };
+
+        class ExecutionIteration
+        {
+            FixtureSuite const &suite_;
+            ReplayCase const &replay_case_;
+            ExecutionSession &session_;
+            std::unique_ptr<ValidatingDb> validating_db_;
+            monad::BlockState block_state_;
+            monad::State state_;
+            monad::BlockHeader header_;
+            monad::Transaction transaction_;
+            monad::MonadMainnet chain_{};
+            FixtureBlockHashBuffer block_hash_buffer_;
+            ReplayHost replay_host_;
+            monad::vm::MemoryPool::Ref message_memory_;
+            evmc_message message_{};
+            std::optional<evmc::Result> result_{};
+
+        public:
+            ExecutionIteration(
+                FixtureSuite const &suite, ReplayCase const &replay_case,
+                ExecutionSession &session, bool const validate_reads)
+                : suite_{suite}
+                , replay_case_{replay_case}
+                , session_{session}
+                , validating_db_{
+                      validate_reads
+                          ? std::make_unique<ValidatingDb>(
+                                session.base->trie_db, suite)
+                          : nullptr}
+                , block_state_{
+                      validating_db_
+                          ? static_cast<monad::Db &>(*validating_db_)
+                          : static_cast<monad::Db &>(session.base->trie_db),
+                      session.vm}
+                , state_{
+                      block_state_,
+                      monad::Incarnation{suite.block.number, 0}}
+                , header_{make_header(suite)}
+                , transaction_{make_transaction(replay_case)}
+                , block_hash_buffer_{suite.block}
+                , replay_host_{
+                      block_hash_buffer_,
+                      state_,
+                      transaction_,
+                      replay_case.message.sender,
+                      header_,
+                      suite.chain_id,
+                      chain_}
+                , message_memory_{session.vm.message_memory_ref()}
+            {
+                monad::init_reserve_balance_context<Traits>(
+                    state_,
+                    replay_case.message.sender,
+                    transaction_,
+                    header_.base_fee_per_gas,
+                    0,
+                    replay_host_.state_tracer,
+                    replay_host_.chain_context);
+
+                replay_host_.host.access_account(header_.beneficiary);
+                state_.access_account(replay_case.message.sender);
+                for (auto const &entry : transaction_.access_list) {
+                    state_.access_account(entry.a);
+                    for (auto const &key : entry.keys) {
+                        state_.access_storage<Traits>(entry.a, key);
+                    }
+                }
+                state_.access_account(replay_case.message.recipient);
+
+                message_ = evmc_message{
+                    .kind = EVMC_CALL,
+                    .flags = 0,
+                    .depth = 0,
+                    .gas = static_cast<std::int64_t>(replay_case.message.gas),
+                    .recipient = replay_case.message.recipient,
+                    .sender = replay_case.message.sender,
+                    .input_data = replay_case.message.input.data(),
+                    .input_size = replay_case.message.input.size(),
+                    .value = monad::store_be_as<evmc::uint256be>(
+                        replay_case.message.value),
+                    .create2_salt = {},
+                    .code_address = replay_case.message.recipient,
+                    .memory_handle = message_memory_.get(),
+                    .memory = message_memory_.get(),
+                    .memory_capacity = session.vm.message_memory_capacity()};
+
+                if (auto const delegate = monad::vm::evm::resolve_delegation(
+                        &replay_host_.host.get_interface(),
+                        replay_host_.host.to_context(),
+                        replay_case.message.recipient)) {
+                    message_.code_address = *delegate;
+                    message_.flags |= EVMC_DELEGATED;
+                    state_.access_account(*delegate);
+                }
             }
 
-            auto message_memory = vm.message_memory_ref();
-            evmc_message message{
-                .kind = EVMC_CALL,
-                .flags = 0,
-                .depth = 0,
-                .gas = static_cast<std::int64_t>(replay_case.message.gas),
-                .recipient = replay_case.message.recipient,
-                .sender = replay_case.message.sender,
-                .input_data = replay_case.message.input.data(),
-                .input_size = replay_case.message.input.size(),
-                .value = monad::store_be_as<evmc::uint256be>(
-                    replay_case.message.value),
-                .create2_salt = {},
-                .code_address = replay_case.message.recipient,
-                .memory_handle = message_memory.get(),
-                .memory = message_memory.get(),
-                .memory_capacity = vm.message_memory_capacity()};
-
-            if (auto const delegate = monad::vm::evm::resolve_delegation(
-                    &replay_host.host.get_interface(),
-                    replay_host.host.to_context(),
-                    replay_case.message.recipient)) {
-                message.code_address = *delegate;
-                message.flags |= EVMC_DELEGATED;
-                state.access_account(*delegate);
+            void execute()
+            {
+                if (result_) {
+                    throw std::logic_error{
+                        "benchmark iteration has already executed"};
+                }
+                result_.emplace(monad::execute_call_message<Traits>(
+                    &replay_host_.host, state_, message_));
             }
 
-            auto const result = monad::execute_call_message<Traits>(
-                &replay_host.host, state, message);
-            if (result.gas_left < 0 || result.gas_left > message.gas) {
-                throw std::runtime_error{
-                    "case " + replay_case.name +
-                    ": execution returned gas_left outside the valid range"};
-            }
-            auto const gas_left = static_cast<std::uint64_t>(result.gas_left);
-            auto output_bytes = monad::byte_string{};
-            if (result.output_size != 0) {
-                output_bytes.assign(
-                    result.output_data,
-                    result.output_data + result.output_size);
-            }
-            ReplayResult replay_result{
-                .status = result.status_code,
-                .output = std::move(output_bytes),
-                .gas_used = replay_case.message.gas - gas_left,
-                .logs = {state.logs().begin(), state.logs().end()},
-                .failures = {}};
+            ReplayResult validate()
+            {
+                if (!result_) {
+                    throw std::logic_error{
+                        "benchmark iteration has not executed"};
+                }
+                if (result_->gas_left < 0 || result_->gas_left > message_.gas) {
+                    throw std::runtime_error{
+                        "case " + replay_case_.name +
+                        ": execution returned gas_left outside the valid range"};
+                }
 
-            if (status_name(replay_result.status) !=
-                replay_case.expected.status) {
-                replay_result.failures.push_back(
-                    "status mismatch: expected " + replay_case.expected.status +
-                    ", got " + status_name(replay_result.status));
+                auto const gas_left =
+                    static_cast<std::uint64_t>(result_->gas_left);
+                auto output_bytes = monad::byte_string{};
+                if (result_->output_size != 0) {
+                    if (result_->output_data == nullptr) {
+                        throw std::runtime_error{
+                            "case " + replay_case_.name +
+                            ": execution returned null output data"};
+                    }
+                    output_bytes.assign(
+                        result_->output_data,
+                        result_->output_data + result_->output_size);
+                }
+                ReplayResult replay_result{
+                    .status = result_->status_code,
+                    .output = std::move(output_bytes),
+                    .gas_used = replay_case_.message.gas - gas_left,
+                    .logs = {state_.logs().begin(), state_.logs().end()},
+                    .failures = {}};
+
+                if (status_name(replay_result.status) !=
+                    replay_case_.expected.status) {
+                    replay_result.failures.push_back(
+                        "status mismatch: expected " +
+                        replay_case_.expected.status + ", got " +
+                        status_name(replay_result.status));
+                }
+                if (replay_result.output != replay_case_.expected.output) {
+                    replay_result.failures.push_back(
+                        "output mismatch: expected " +
+                        hex(replay_case_.expected.output) + ", got " +
+                        hex(replay_result.output));
+                }
+                if (replay_result.gas_used !=
+                    replay_case_.expected.gas_used) {
+                    replay_result.failures.push_back(
+                        "gas mismatch: expected " +
+                        std::to_string(replay_case_.expected.gas_used) +
+                        ", got " + std::to_string(replay_result.gas_used));
+                }
+                if (replay_case_.expected.logs &&
+                    replay_result.logs != *replay_case_.expected.logs) {
+                    replay_result.failures.push_back("logs mismatch");
+                }
+                verify_expected_state(
+                    replay_case_, state_, replay_result.failures);
+                if (validating_db_) {
+                    replay_result.failures.insert(
+                        replay_result.failures.end(),
+                        validating_db_->missing().begin(),
+                        validating_db_->missing().end());
+                }
+                replay_result.failures.insert(
+                    replay_result.failures.end(),
+                    block_hash_buffer_.missing().begin(),
+                    block_hash_buffer_.missing().end());
+                return replay_result;
             }
-            if (replay_result.output != replay_case.expected.output) {
-                replay_result.failures.push_back(
-                    "output mismatch: expected " +
-                    hex(replay_case.expected.output) + ", got " +
-                    hex(replay_result.output));
-            }
-            if (replay_result.gas_used != replay_case.expected.gas_used) {
-                replay_result.failures.push_back(
-                    "gas mismatch: expected " +
-                    std::to_string(replay_case.expected.gas_used) + ", got " +
-                    std::to_string(replay_result.gas_used));
-            }
-            if (replay_case.expected.logs &&
-                replay_result.logs != *replay_case.expected.logs) {
-                replay_result.failures.push_back("logs mismatch");
-            }
-            verify_expected_state(replay_case, state, replay_result.failures);
-            replay_result.failures.insert(
-                replay_result.failures.end(),
-                validating_db.missing().begin(),
-                validating_db.missing().end());
-            replay_result.failures.insert(
-                replay_result.failures.end(),
-                block_hash_buffer.missing().begin(),
-                block_hash_buffer.missing().end());
-            return replay_result;
+        };
+
+        ReplayResult execute_case(
+            FixtureSuite const &suite, ReplayCase const &replay_case,
+            ExecutionSession &session, bool const validate_reads)
+        {
+            ExecutionIteration iteration{
+                suite, replay_case, session, validate_reads};
+            iteration.execute();
+            return iteration.validate();
         }
 
         void fail_case(
@@ -605,6 +718,120 @@ namespace monad_execbench
             }
             throw std::runtime_error{message.str()};
         }
+
+        FixtureSuite const &require_supported_suite(FixtureSuite const &suite)
+        {
+            if (suite.execution_env != default_execution_env) {
+                throw std::runtime_error{
+                    "unsupported execution environment: " +
+                    suite.execution_env};
+            }
+            return suite;
+        }
+    }
+
+    struct BenchmarkSession::Impl
+    {
+        FixtureSuite const &suite;
+        BenchmarkMode mode;
+        ExecutionSession session;
+
+        Impl(FixtureSuite const &fixture_suite, BenchmarkMode const mode_value)
+            : suite{require_supported_suite(fixture_suite)}
+            , mode{mode_value}
+            , session{suite, mode}
+        {
+        }
+    };
+
+    struct BenchmarkIteration::Impl
+    {
+        ReplayCase const &replay_case;
+        BenchmarkMode mode;
+        std::unique_ptr<ExecutionIteration> execution;
+
+        Impl(
+            ReplayCase const &case_value, BenchmarkMode const mode_value,
+            std::unique_ptr<ExecutionIteration> iteration)
+            : replay_case{case_value}
+            , mode{mode_value}
+            , execution{std::move(iteration)}
+        {
+        }
+    };
+
+    std::string_view benchmark_mode_name(BenchmarkMode const mode)
+    {
+        switch (mode) {
+        case BenchmarkMode::dual_hot:
+            return "dual-hot";
+        case BenchmarkMode::interpreter_hot:
+            return "interpreter-hot";
+        }
+        throw std::runtime_error{"unsupported benchmark mode"};
+    }
+
+    BenchmarkIteration::BenchmarkIteration(std::unique_ptr<Impl> impl)
+        : impl_{std::move(impl)}
+    {
+    }
+
+    BenchmarkIteration::~BenchmarkIteration() = default;
+    BenchmarkIteration::BenchmarkIteration(BenchmarkIteration &&) noexcept =
+        default;
+    BenchmarkIteration &BenchmarkIteration::operator=(
+        BenchmarkIteration &&) noexcept = default;
+
+    void BenchmarkIteration::execute()
+    {
+        impl_->execution->execute();
+    }
+
+    BenchmarkSample BenchmarkIteration::validate()
+    {
+        auto const result = impl_->execution->validate();
+        if (!result.failures.empty()) {
+            fail_case(
+                impl_->replay_case,
+                std::string{benchmark_mode_name(impl_->mode)},
+                result.failures);
+        }
+        return BenchmarkSample{
+            .gas_used = result.gas_used,
+            .output_size = result.output.size(),
+            .log_count = result.logs.size()};
+    }
+
+    BenchmarkSession::BenchmarkSession(
+        FixtureSuite const &suite, BenchmarkMode const mode)
+        : impl_{std::make_unique<Impl>(suite, mode)}
+    {
+    }
+
+    BenchmarkSession::~BenchmarkSession() = default;
+    BenchmarkSession::BenchmarkSession(BenchmarkSession &&) noexcept = default;
+    BenchmarkSession &BenchmarkSession::operator=(
+        BenchmarkSession &&) noexcept = default;
+
+    BenchmarkIteration BenchmarkSession::prepare(
+        ReplayCase const &replay_case)
+    {
+        auto const belongs_to_suite = std::any_of(
+            impl_->suite.cases.begin(),
+            impl_->suite.cases.end(),
+            [&replay_case](auto const &candidate) {
+                return std::addressof(candidate) ==
+                       std::addressof(replay_case);
+            });
+        if (!belongs_to_suite) {
+            throw std::invalid_argument{
+                "benchmark case does not belong to the prepared suite"};
+        }
+        return BenchmarkIteration{std::make_unique<BenchmarkIteration::Impl>(
+            replay_case,
+            impl_->mode,
+            std::make_unique<ExecutionIteration>(
+                impl_->suite, replay_case, impl_->session, false))};
     }
 
     VerificationSummary verify_fixture_suite(
@@ -623,17 +850,21 @@ namespace monad_execbench
                 "unsupported execution environment: " + selected_environment};
         }
 
+        ExecutionSession interpreter_session{
+            suite, BenchmarkMode::interpreter_hot};
+        ExecutionSession dual_session{suite, BenchmarkMode::dual_hot};
+
         for (auto const &replay_case : suite.cases) {
             auto const interpreter = execute_case(
-                suite, replay_case, monad::vm::VM::InterpreterOnly);
+                suite, replay_case, interpreter_session, true);
             if (!interpreter.failures.empty()) {
-                fail_case(replay_case, "InterpreterOnly", interpreter.failures);
+                fail_case(replay_case, "interpreter-hot", interpreter.failures);
             }
 
             auto const dual =
-                execute_case(suite, replay_case, monad::vm::VM::Dual);
+                execute_case(suite, replay_case, dual_session, true);
             if (!dual.failures.empty()) {
-                fail_case(replay_case, "Dual", dual.failures);
+                fail_case(replay_case, "dual-hot", dual.failures);
             }
             if (interpreter.status != dual.status ||
                 interpreter.output != dual.output ||
