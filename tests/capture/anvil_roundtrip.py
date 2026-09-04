@@ -129,9 +129,20 @@ def assert_nested_log_order(rpc: RpcClient, calls: dict[str, object]) -> None:
     snapshot = rpc.call("evm_snapshot", [])
     try:
         transaction_hash = rpc.call("eth_sendTransaction", [message])
-        receipt = rpc.call("eth_getTransactionReceipt", [transaction_hash])
-        if not isinstance(receipt, dict) or receipt.get("status") != "0x1":
-            raise RuntimeError("nested log-order transaction failed")
+        deadline = time.monotonic() + 5
+        receipt = None
+        while time.monotonic() < deadline:
+            receipt = rpc.call("eth_getTransactionReceipt", [transaction_hash])
+            if isinstance(receipt, dict):
+                break
+            time.sleep(0.01)
+        if not isinstance(receipt, dict):
+            raise TimeoutError("nested log-order transaction receipt timed out")
+        if receipt.get("status") != "0x1":
+            raise RuntimeError(
+                "nested log-order transaction failed: "
+                f"status={receipt.get('status')} gasUsed={receipt.get('gasUsed')}"
+            )
         receipt_logs = [
             {
                 "address": str(log["address"]).lower(),
