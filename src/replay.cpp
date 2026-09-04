@@ -477,8 +477,7 @@ namespace monad_execbench
             monad::vm::VM &vm, FixtureSuite const &suite,
             BenchmarkMode const mode)
         {
-            std::vector<
-                std::pair<monad::bytes32_t, monad::vm::SharedVarcode>>
+            std::vector<std::pair<monad::bytes32_t, monad::vm::SharedVarcode>>
                 varcodes;
             varcodes.reserve(suite.accounts.size());
             for (auto const &account : suite.accounts) {
@@ -634,7 +633,8 @@ namespace monad_execbench
                 if (result_->gas_left < 0 || result_->gas_left > message_.gas) {
                     throw std::runtime_error{
                         "case " + replay_case_.name +
-                        ": execution returned gas_left outside the valid range"};
+                        ": execution returned gas_left outside the valid "
+                        "range"};
                 }
 
                 auto const gas_left =
@@ -670,8 +670,7 @@ namespace monad_execbench
                         hex(replay_case_.expected.output) + ", got " +
                         hex(replay_result.output));
                 }
-                if (replay_result.gas_used !=
-                    replay_case_.expected.gas_used) {
+                if (replay_result.gas_used != replay_case_.expected.gas_used) {
                     replay_result.failures.push_back(
                         "gas mismatch: expected " +
                         std::to_string(replay_case_.expected.gas_used) +
@@ -779,8 +778,8 @@ namespace monad_execbench
     BenchmarkIteration::~BenchmarkIteration() = default;
     BenchmarkIteration::BenchmarkIteration(BenchmarkIteration &&) noexcept =
         default;
-    BenchmarkIteration &BenchmarkIteration::operator=(
-        BenchmarkIteration &&) noexcept = default;
+    BenchmarkIteration &
+    BenchmarkIteration::operator=(BenchmarkIteration &&) noexcept = default;
 
     void BenchmarkIteration::execute()
     {
@@ -810,18 +809,16 @@ namespace monad_execbench
 
     BenchmarkSession::~BenchmarkSession() = default;
     BenchmarkSession::BenchmarkSession(BenchmarkSession &&) noexcept = default;
-    BenchmarkSession &BenchmarkSession::operator=(
-        BenchmarkSession &&) noexcept = default;
+    BenchmarkSession &
+    BenchmarkSession::operator=(BenchmarkSession &&) noexcept = default;
 
-    BenchmarkIteration BenchmarkSession::prepare(
-        ReplayCase const &replay_case)
+    BenchmarkIteration BenchmarkSession::prepare(ReplayCase const &replay_case)
     {
         auto const belongs_to_suite = std::any_of(
             impl_->suite.cases.begin(),
             impl_->suite.cases.end(),
             [&replay_case](auto const &candidate) {
-                return std::addressof(candidate) ==
-                       std::addressof(replay_case);
+                return std::addressof(candidate) == std::addressof(replay_case);
             });
         if (!belongs_to_suite) {
             throw std::invalid_argument{
@@ -855,8 +852,8 @@ namespace monad_execbench
         ExecutionSession dual_session{suite, BenchmarkMode::dual_hot};
 
         for (auto const &replay_case : suite.cases) {
-            auto const interpreter = execute_case(
-                suite, replay_case, interpreter_session, true);
+            auto const interpreter =
+                execute_case(suite, replay_case, interpreter_session, true);
             if (!interpreter.failures.empty()) {
                 fail_case(replay_case, "interpreter-hot", interpreter.failures);
             }

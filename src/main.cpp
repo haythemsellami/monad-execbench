@@ -3,6 +3,7 @@
 #include <category/vm/runtime/types.hpp>
 #include <category/vm/vm.hpp>
 
+#include <monad-execbench/benchmark.hpp>
 #include <monad-execbench/fixture.hpp>
 #include <monad-execbench/replay.hpp>
 
@@ -37,6 +38,7 @@ namespace
                << "  monad-execbench smoke [--execution-env MONAD_TEN]\n"
                << "  monad-execbench verify <fixture-suite> "
                   "[--execution-env MONAD_TEN]\n";
+        monad_execbench::print_benchmark_usage(output);
     }
 
     std::string to_hex(std::uint8_t const *data, std::size_t const size)
@@ -160,6 +162,16 @@ int main(int argc, char **argv)
 
     if (std::string_view{argv[1]} == "verify") {
         return run_verify(argc, argv);
+    }
+
+    if (std::string_view{argv[1]} == "run") {
+        try {
+            return monad_execbench::run_benchmark_command(argc, argv);
+        }
+        catch (std::exception const &error) {
+            std::cerr << "benchmark failed: " << error.what() << '\n';
+            return 1;
+        }
     }
 
     if (std::string_view{argv[1]} != "smoke") {
