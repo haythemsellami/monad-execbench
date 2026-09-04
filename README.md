@@ -63,8 +63,26 @@ and selected post-state. An account, runtime code, storage slot, or block hash
 read that was not captured makes verification fail.
 
 The bundle schema is documented in
-[docs/fixture-format.md](docs/fixture-format.md). Fixture capture and timed
-benchmarking are planned follow-up milestones.
+[docs/fixture-format.md](docs/fixture-format.md). Timed benchmarking is a
+planned follow-up milestone.
+
+## Capture utility
+
+The Python capture utility converts generic EVM call descriptions into
+portable fixture suites using a Monad-compatible local fork:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -e .
+.venv/bin/monad-execbench-capture \
+  --rpc-url http://127.0.0.1:8545 \
+  --calls benchmark-calls.json \
+  --block latest \
+  --output fixtures/generated/example-suite
+```
+
+See [the capture guide](docs/capture.md) for the call-manifest schema, required
+RPC methods, and offline verification workflow.
 
 ## License
 
