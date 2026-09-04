@@ -130,5 +130,6 @@ PYTHONPATH=capture python3 tests/capture/anvil_roundtrip.py \
 `--forge` and `--anvil` accept explicit binary paths. The test requires Foundry
 v1.8.0 or newer, launches Anvil with `MonadTen`, deploys fresh probe contracts,
 and covers ABI-generated calldata, a nested reverted read, direct storage reads
-and writes, a root revert, logs, access-list warming, metadata, capture,
-two-mode verification, and a short `dual-hot` run.
+and writes, a root revert, nested log ordering checked against a transaction
+receipt, access-list warming, metadata, capture, two-mode verification, and a
+short `dual-hot` run.

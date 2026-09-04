@@ -5,6 +5,7 @@ import json
 import platform
 import shutil
 import tempfile
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -12,6 +13,8 @@ from pathlib import Path
 from typing import Any, Protocol
 
 import zstandard
+
+from .rpc import RpcError
 
 CALLS_SCHEMA = "monad-execbench/calls-v1"
 FIXTURE_SCHEMA = "monad-execbench/v1"
@@ -24,6 +27,8 @@ EMPTY_STORAGE_ROOT = (
 EVMC_MAX_GAS = (1 << 63) - 1
 METADATA_KEY_MAX_LENGTH = 64
 RESERVED_COUNTERS = {"execution_gas", "return_data_bytes", "log_count"}
+BLOCK_HASH_RETRY_ATTEMPTS = 5
+BLOCK_HASH_RETRY_BASE_DELAY_SECONDS = 0.1
 
 
 class CaptureError(RuntimeError):
@@ -295,50 +300,51 @@ def derive_execution_gas(
 def collect_logs(
     frame: Mapping[str, Any], path: str = "callTrace"
 ) -> list[dict[str, Any]]:
-    if frame.get("error") is not None:
-        return []
-    positioned: list[tuple[int, int, dict[str, Any]]] = []
-    sequence = 0
-
-    def visit(current: Mapping[str, Any], current_path: str) -> None:
-        nonlocal sequence
+    def visit(current: Mapping[str, Any], current_path: str) -> list[dict[str, Any]]:
         if current.get("error") is not None:
-            return
-        for index, raw_log in enumerate(current.get("logs", [])):
+            return []
+
+        calls = require_list(current.get("calls", []), f"{current_path}.calls")
+        logs = require_list(current.get("logs", []), f"{current_path}.logs")
+        logs_by_position: list[list[dict[str, Any]]] = [
+            [] for _ in range(len(calls) + 1)
+        ]
+        for index, raw_log in enumerate(logs):
             log_path = f"{current_path}.logs[{index}]"
             log = require_mapping(raw_log, log_path)
             topics = require_list(log.get("topics"), f"{log_path}.topics")
-            position = parse_quantity(
-                log.get("position", sequence), f"{log_path}.position"
-            )
-            positioned.append(
-                (
-                    position,
-                    sequence,
-                    {
-                        "address": normalize_address(
-                            log.get("address"), f"{log_path}.address"
-                        ),
-                        "data": normalize_bytes(
-                            log.get("data", "0x"), f"{log_path}.data"
-                        ),
-                        "topics": [
-                            normalize_bytes32(
-                                topic, f"{log_path}.topics[{topic_index}]"
-                            )
-                            for topic_index, topic in enumerate(topics)
-                        ],
-                    },
+            if "position" not in log:
+                raise CaptureError(
+                    f"{log_path}.position: required for callTracer log ordering"
                 )
+            position = parse_quantity(log["position"], f"{log_path}.position")
+            if position > len(calls):
+                raise CaptureError(
+                    f"{log_path}.position: expected a value from 0 to {len(calls)}"
+                )
+            logs_by_position[position].append(
+                {
+                    "address": normalize_address(
+                        log.get("address"), f"{log_path}.address"
+                    ),
+                    "data": normalize_bytes(log.get("data", "0x"), f"{log_path}.data"),
+                    "topics": [
+                        normalize_bytes32(topic, f"{log_path}.topics[{topic_index}]")
+                        for topic_index, topic in enumerate(topics)
+                    ],
+                }
             )
-            sequence += 1
-        for index, raw_child in enumerate(current.get("calls", [])):
-            child_path = f"{current_path}.calls[{index}]"
-            visit(require_mapping(raw_child, child_path), child_path)
 
-    visit(frame, path)
-    positioned.sort(key=lambda item: (item[0], item[1]))
-    return [item[2] for item in positioned]
+        ordered: list[dict[str, Any]] = []
+        for position in range(len(calls) + 1):
+            ordered.extend(logs_by_position[position])
+            if position < len(calls):
+                child_path = f"{current_path}.calls[{position}]"
+                child = require_mapping(calls[position], child_path)
+                ordered.extend(visit(child, child_path))
+        return ordered
+
+    return visit(frame, path)
 
 
 def expected_state(
@@ -552,15 +558,50 @@ def capture_block_hashes(rpc: Rpc, block_number: int) -> dict[str, str]:
     result: dict[str, str] = {}
     for offset in range(0, len(numbers), 50):
         chunk = numbers[offset : offset + 50]
-        blocks = rpc.batch(
-            "eth_getBlockByNumber", [[quantity(number), False] for number in chunk]
-        )
-        for number, raw_block in zip(chunk, blocks, strict=True):
-            block = require_mapping(raw_block, f"blockHashes.{number}")
-            result[str(number)] = normalize_bytes32(
-                block.get("hash"), f"blockHashes.{number}.hash"
+        try:
+            blocks = rpc.batch(
+                "eth_getBlockByNumber",
+                [[quantity(number), False] for number in chunk],
             )
+        except RpcError:
+            blocks = [None] * len(chunk)
+        if len(blocks) != len(chunk):
+            blocks = [None] * len(chunk)
+        for number, raw_block in zip(chunk, blocks, strict=True):
+            try:
+                block_hash = normalize_block_hash(raw_block, number)
+            except CaptureError:
+                block_hash = fetch_block_hash(rpc, number)
+            result[str(number)] = block_hash
     return result
+
+
+def normalize_block_hash(raw_block: Any, number: int) -> str:
+    path = f"blockHashes.{number}"
+    block = require_mapping(raw_block, path)
+    returned_number = parse_quantity(block.get("number"), f"{path}.number")
+    if returned_number != number:
+        raise CaptureError(f"{path}.number: expected {number}, got {returned_number}")
+    block_hash = normalize_bytes32(block.get("hash"), f"{path}.hash")
+    if block_hash == "0x" + "00" * 32:
+        raise CaptureError(f"{path}.hash: expected a nonzero block hash")
+    return block_hash
+
+
+def fetch_block_hash(rpc: Rpc, number: int) -> str:
+    last_error: CaptureError | RpcError | None = None
+    for attempt in range(1, BLOCK_HASH_RETRY_ATTEMPTS + 1):
+        try:
+            raw_block = rpc.call("eth_getBlockByNumber", [quantity(number), False])
+            return normalize_block_hash(raw_block, number)
+        except (CaptureError, RpcError) as error:
+            last_error = error
+        if attempt < BLOCK_HASH_RETRY_ATTEMPTS:
+            time.sleep(BLOCK_HASH_RETRY_BASE_DELAY_SECONDS * (2 ** (attempt - 1)))
+    raise CaptureError(
+        f"blockHashes.{number}: unavailable after "
+        f"{BLOCK_HASH_RETRY_ATTEMPTS} attempts: {last_error}"
+    ) from last_error
 
 
 def hydrate_state(

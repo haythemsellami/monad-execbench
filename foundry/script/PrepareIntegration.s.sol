@@ -47,6 +47,8 @@ contract IntegrationRoot {
     IntegrationProbe private immutable PROBE;
     uint256 private marker;
 
+    event BetweenChildren(uint256 value);
+
     constructor(IntegrationProbe probe_) {
         PROBE = probe_;
         marker = 7;
@@ -58,6 +60,12 @@ contract IntegrationRoot {
         } catch {
             return marker;
         }
+    }
+
+    function emitBetweenChildren() external {
+        PROBE.emitLog(1);
+        emit BetweenChildren(marker);
+        PROBE.emitLog(2);
     }
 }
 
@@ -77,7 +85,7 @@ contract PrepareIntegration {
         IntegrationRoot root = new IntegrationRoot(probe);
         _VM.stopBroadcast();
 
-        ExecBench.Manifest memory manifest = ExecBench.create(6);
+        ExecBench.Manifest memory manifest = ExecBench.create(7);
         manifest.addCall(
             "probe/nested-revert-read",
             caller,
@@ -116,6 +124,13 @@ contract PrepareIntegration {
         );
         manifest.addCall(
             "probe/log", caller, address(probe), abi.encodeCall(IntegrationProbe.emitLog, (1)), 0
+        );
+        manifest.addCall(
+            "probe/nested-log-order",
+            caller,
+            address(root),
+            abi.encodeCall(IntegrationRoot.emitBetweenChildren, ()),
+            0
         );
 
         ExecBench.Options memory accessListOptions;
