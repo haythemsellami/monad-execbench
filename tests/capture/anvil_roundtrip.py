@@ -59,10 +59,10 @@ def monad_network_arguments(anvil: str) -> list[str]:
         text=True,
     ).stdout
     if "--network <NETWORK>" in help_text and "monad" in help_text:
-        return ["--network", "monad", "--hardfork", "MonadNext"]
-    if "--monad" in help_text:
-        return ["--monad"]
-    raise RuntimeError(f"{anvil} does not expose Monad network support")
+        return ["--network", "monad", "--hardfork", "MonadTen"]
+    raise RuntimeError(
+        f"{anvil} does not expose first-class Monad support; use Foundry v1.8.0 or newer"
+    )
 
 
 def prepare_calls(forge: str, endpoint: str, output: Path) -> bytes:
@@ -123,8 +123,8 @@ def run_benchmark(verifier: Path, fixture: Path, output: Path) -> None:
     iterations = [
         entry for entry in report["benchmarks"] if entry["run_type"] == "iteration"
     ]
-    if len(iterations) != 10:
-        raise RuntimeError("benchmark report did not contain two runs for five cases")
+    if len(iterations) != 12:
+        raise RuntimeError("benchmark report did not contain two runs for six cases")
     metadata_runs = [
         entry for entry in iterations if "probe/storage-read" in entry["name"]
     ]
@@ -193,7 +193,7 @@ def main() -> int:
                     failed = True
                     print(result.stderr, end="", file=sys.stderr)
                     return result.returncode
-                if "cases=5\nverification=passed\n" not in result.stdout:
+                if "cases=6\nverification=passed\n" not in result.stdout:
                     raise RuntimeError("verifier did not report the expected summary")
                 run_benchmark(
                     arguments.verifier,

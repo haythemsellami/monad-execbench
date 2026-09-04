@@ -26,6 +26,10 @@ contract IntegrationProbe {
         return values[key];
     }
 
+    function write(uint256 key, uint256 value) external {
+        values[key] = value;
+    }
+
     function readAndRevert(uint256 key) external view {
         revert ProbeRevert(values[key]);
     }
@@ -73,7 +77,7 @@ contract PrepareIntegration {
         IntegrationRoot root = new IntegrationRoot(probe);
         _VM.stopBroadcast();
 
-        ExecBench.Manifest memory manifest = ExecBench.create(5);
+        ExecBench.Manifest memory manifest = ExecBench.create(6);
         manifest.addCall(
             "probe/nested-revert-read",
             caller,
@@ -94,6 +98,13 @@ contract PrepareIntegration {
             abi.encodeCall(IntegrationProbe.read, (1)),
             0,
             readOptions
+        );
+        manifest.addCall(
+            "probe/storage-write",
+            caller,
+            address(probe),
+            abi.encodeCall(IntegrationProbe.write, (2, 99)),
+            0
         );
 
         manifest.addCall(

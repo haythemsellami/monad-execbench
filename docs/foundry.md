@@ -98,21 +98,24 @@ monad-execbench run fixtures/generated/suite \
   --output results/dual-hot.json
 ```
 
-## Execution-environment compatibility
+## Execution-environment selection
 
 `--execution-env` records the schedule that the reference RPC is expected to
 implement; it cannot change that RPC's EVM. Verification is the enforcement
 boundary: captured status, output, gas, logs, and state must match the pinned
 Monad C++ implementation before measurement starts.
 
-Foundry `v1.7.1-monad-v1.0.0` exposes `MonadNext`, but its bundled
-`monad-revm 0.4.0` does not contain the MIP-8 page-write SSTORE pricing enabled
-by the pinned C++ client's `MONAD_TEN`. Its read-only calls are suitable for the
-repository integration test, but its state-writing gas must not be treated as a
-`MONAD_TEN` reference. Capture state-writing production fixtures from an RPC
-that implements MIP-8, or use a newer Monad Foundry build that explicitly adds
-that schedule. The verifier will reject a mismatched fixture instead of
-benchmarking it.
+Foundry v1.8.0 or newer provides first-class Monad execution and implements
+`MonadTen`, including MIP-8 page-based storage accounting. Start a local node
+with an explicit network and hardfork when preparing `MONAD_TEN` fixtures:
+
+```bash
+anvil --network monad --hardfork MonadTen
+```
+
+`MonadTen` is also the default for local Monad execution in Foundry v1.8.0,
+but selecting it explicitly keeps the saved workflow independent of defaults.
+The verifier rejects an RPC schedule mismatch instead of benchmarking it.
 
 ## Repository integration test
 
@@ -124,9 +127,8 @@ PYTHONPATH=capture python3 tests/capture/anvil_roundtrip.py \
   --verifier ./build/monad-execbench
 ```
 
-`--forge` and `--anvil` accept explicit binary paths. The test deploys fresh
-probe contracts and covers ABI-generated calldata, a nested reverted read, a
-direct storage read, a root revert, logs, access-list warming, metadata,
-capture, two-mode verification, and a short `dual-hot` run. Its calls are
-read-only with respect to persistent storage so the available Anvil and the
-`MONAD_TEN` runner have a shared reference surface.
+`--forge` and `--anvil` accept explicit binary paths. The test requires Foundry
+v1.8.0 or newer, launches Anvil with `MonadTen`, deploys fresh probe contracts,
+and covers ABI-generated calldata, a nested reverted read, direct storage reads
+and writes, a root revert, logs, access-list warming, metadata, capture,
+two-mode verification, and a short `dual-hot` run.

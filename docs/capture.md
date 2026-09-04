@@ -96,7 +96,7 @@ used values expected by the C++ runner.
 The selected execution environment is an assertion about the RPC's semantics,
 not an instruction sent to the RPC. The offline verifier compares the captured
 result with the pinned C++ schedule and rejects incompatible gas or behavior.
-Review the [Foundry compatibility requirement](foundry.md#execution-environment-compatibility)
+Review the [Foundry execution-environment setup](foundry.md#execution-environment-selection)
 before capturing `MONAD_TEN` fixtures from a local Anvil.
 
 `provenance.json` records the pinned chain and block, Monad commit, capture and
@@ -138,6 +138,6 @@ host, run the live capture-to-replay integration test:
 ```
 
 The integration test covers a successful nested call, state read inside a
-reverted child frame, a direct storage read, a root revert with data, an
-emitted log, access-list warming, and case metadata. The generated fixture is
-verified in both VM modes and run through a short `dual-hot` benchmark.
+reverted child frame, direct storage reads and writes, a root revert with data,
+an emitted log, access-list warming, and case metadata. The generated fixture
+is verified in both VM modes and run through a short `dual-hot` benchmark.
