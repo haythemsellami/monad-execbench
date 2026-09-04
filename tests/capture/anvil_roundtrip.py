@@ -4,6 +4,7 @@ import argparse
 import json
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -84,48 +85,60 @@ def main() -> int:
 
     port = available_port()
     endpoint = f"http://127.0.0.1:{port}"
-    process = subprocess.Popen(
-        [arguments.anvil, "--monad", "--port", str(port), "--silent"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-    )
-    try:
-        rpc = RpcClient(endpoint)
-        wait_for_rpc(rpc, process)
-        install_probe_contracts(rpc)
-        calls = calls_document()
-        calls_bytes = (json.dumps(calls, indent=2) + "\n").encode()
-        bundle = capture_suite(rpc, calls)
-        with tempfile.TemporaryDirectory() as directory:
-            fixture = Path(directory) / "fixture"
-            write_bundle(
-                fixture,
-                bundle,
-                calls_bytes=calls_bytes,
-                monad_commit="integration-test",
-                capture_version=__version__,
-                created_at="2026-01-01T00:00:00Z",
-            )
-            result = subprocess.run(
-                [arguments.verifier, "verify", fixture],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-            print(result.stdout, end="")
-            if result.returncode != 0:
-                print(result.stderr, end="")
-                return result.returncode
-            if "cases=5\nverification=passed\n" not in result.stdout:
-                raise RuntimeError("verifier did not report the expected summary")
-        return 0
-    finally:
-        process.terminate()
+    with tempfile.TemporaryFile() as anvil_stderr:
+        process = subprocess.Popen(
+            [arguments.anvil, "--monad", "--port", str(port), "--silent"],
+            stdout=subprocess.DEVNULL,
+            stderr=anvil_stderr,
+        )
+        failed = False
         try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait()
+            rpc = RpcClient(endpoint)
+            wait_for_rpc(rpc, process)
+            install_probe_contracts(rpc)
+            calls = calls_document()
+            calls_bytes = (json.dumps(calls, indent=2) + "\n").encode()
+            bundle = capture_suite(rpc, calls)
+            with tempfile.TemporaryDirectory() as directory:
+                fixture = Path(directory) / "fixture"
+                write_bundle(
+                    fixture,
+                    bundle,
+                    calls_bytes=calls_bytes,
+                    monad_commit="integration-test",
+                    capture_version=__version__,
+                    created_at="2026-01-01T00:00:00Z",
+                )
+                result = subprocess.run(
+                    [arguments.verifier, "verify", fixture],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                print(result.stdout, end="")
+                if result.returncode != 0:
+                    failed = True
+                    print(result.stderr, end="", file=sys.stderr)
+                    return result.returncode
+                if "cases=5\nverification=passed\n" not in result.stdout:
+                    raise RuntimeError("verifier did not report the expected summary")
+            return 0
+        except BaseException:
+            failed = True
+            raise
+        finally:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+            if failed:
+                anvil_stderr.seek(0)
+                log = anvil_stderr.read().decode(errors="replace")
+                if log:
+                    print("Anvil stderr:", file=sys.stderr)
+                    print(log, end="", file=sys.stderr)
 
 
 if __name__ == "__main__":
