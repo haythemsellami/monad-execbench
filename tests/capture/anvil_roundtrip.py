@@ -87,6 +87,20 @@ def pinned_monad_commit() -> str:
     ).stdout.strip()
 
 
+def monad_network_arguments(anvil: str) -> list[str]:
+    help_text = subprocess.run(
+        [anvil, "--help"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    if "--network <NETWORK>" in help_text and "monad" in help_text:
+        return ["--network", "monad"]
+    if "--monad" in help_text:
+        return ["--monad"]
+    raise RuntimeError(f"{anvil} does not expose Monad network support")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--anvil", default="anvil")
@@ -97,7 +111,13 @@ def main() -> int:
     endpoint = f"http://127.0.0.1:{port}"
     with tempfile.TemporaryFile() as anvil_stderr:
         process = subprocess.Popen(
-            [arguments.anvil, "--monad", "--port", str(port), "--silent"],
+            [
+                arguments.anvil,
+                *monad_network_arguments(arguments.anvil),
+                "--port",
+                str(port),
+                "--silent",
+            ],
             stdout=subprocess.DEVNULL,
             stderr=anvil_stderr,
         )
