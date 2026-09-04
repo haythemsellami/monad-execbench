@@ -1,6 +1,14 @@
 [
   {
     "name": "return-constant",
+    "metadata": {
+      "labels": {
+        "implementation": "synthetic"
+      },
+      "counters": {
+        "amount_in": "10000000"
+      }
+    },
     "message": {
       "from": "0x1000000000000000000000000000000000000000",
       "to": "0x2000000000000000000000000000000000000001",

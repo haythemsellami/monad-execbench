@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cmath>
 #include <fstream>
 #include <limits>
 #include <stdexcept>
@@ -369,6 +370,129 @@ namespace monad_execbench
             }
             return result;
         }
+
+        bool valid_metadata_key(std::string const &key)
+        {
+            if (key.empty() || key.size() > 64) {
+                return false;
+            }
+            auto const name_start = [](unsigned char character) {
+                return character == '_' ||
+                       (character >= 'a' && character <= 'z') ||
+                       (character >= 'A' && character <= 'Z');
+            };
+            if (!name_start(static_cast<unsigned char>(key.front()))) {
+                return false;
+            }
+            return std::all_of(
+                key.begin() + 1,
+                key.end(),
+                [&name_start](unsigned char character) {
+                    return name_start(character) ||
+                           (character >= '0' && character <= '9') ||
+                           character == '.' || character == '-';
+                });
+        }
+
+        void validate_metadata_key(
+            std::string const &key, std::string const &path)
+        {
+            if (!valid_metadata_key(key)) {
+                invalid(
+                    path,
+                    "must match [A-Za-z_][A-Za-z0-9_.-]{0,63}");
+            }
+        }
+
+        CaseMetadata metadata(json const &value, std::string const &path)
+        {
+            if (!value.is_object()) {
+                invalid(path, "expected an object");
+            }
+            CaseMetadata result;
+            if (value.contains("labels")) {
+                auto const &labels = value.at("labels");
+                if (!labels.is_object() || labels.empty()) {
+                    invalid(path + ".labels", "expected a non-empty object");
+                }
+                for (auto const &[key, label] : labels.items()) {
+                    validate_metadata_key(key, path + ".labels key");
+                    if (!label.is_string()) {
+                        invalid(path + ".labels." + key, "expected a string");
+                    }
+                    result.labels.emplace_back(key, label.get<std::string>());
+                }
+            }
+            if (value.contains("counters")) {
+                auto const &counters = value.at("counters");
+                if (!counters.is_object() || counters.empty()) {
+                    invalid(path + ".counters", "expected a non-empty object");
+                }
+                for (auto const &[key, counter] : counters.items()) {
+                    validate_metadata_key(key, path + ".counters key");
+                    if (key == "execution_gas" ||
+                        key == "return_data_bytes" || key == "log_count") {
+                        invalid(
+                            path + ".counters." + key,
+                            "counter name is reserved");
+                    }
+                    std::string exact_value;
+                    if (counter.is_number_unsigned()) {
+                        exact_value =
+                            std::to_string(counter.get<std::uint64_t>());
+                    }
+                    else if (counter.is_string()) {
+                        exact_value = counter.get<std::string>();
+                        if (exact_value.empty() ||
+                            !std::all_of(
+                                exact_value.begin(),
+                                exact_value.end(),
+                                [](unsigned char character) {
+                                    return character >= '0' &&
+                                           character <= '9';
+                                })) {
+                            invalid(
+                                path + ".counters." + key,
+                                "expected a decimal unsigned integer");
+                        }
+                    }
+                    else {
+                        invalid(
+                            path + ".counters." + key,
+                            "expected an unsigned integer or decimal string");
+                    }
+                    (void)uint256(counter, path + ".counters." + key);
+                    double benchmark_value{};
+                    try {
+                        benchmark_value = std::stod(exact_value);
+                    }
+                    catch (std::exception const &) {
+                        invalid(
+                            path + ".counters." + key,
+                            "cannot represent counter for benchmarking");
+                    }
+                    if (!std::isfinite(benchmark_value)) {
+                        invalid(
+                            path + ".counters." + key,
+                            "cannot represent counter for benchmarking");
+                    }
+                    result.counters.push_back(CaseCounter{
+                        .name = key,
+                        .exact_value = std::move(exact_value),
+                        .benchmark_value = benchmark_value});
+                }
+            }
+            if (result.labels.empty() && result.counters.empty()) {
+                invalid(path, "expected at least one label or counter");
+            }
+            for (auto const &[key, ignored] : value.items()) {
+                (void)ignored;
+                if (key != "labels" && key != "counters") {
+                    invalid(path + "." + key, "unknown field");
+                }
+            }
+            return result;
+        }
     }
 
     FixtureSuite load_fixture_suite(std::filesystem::path const &directory)
@@ -588,7 +712,11 @@ namespace monad_execbench
                                  ? expected_state(
                                        expected.at("state"),
                                        path + ".expected.state")
-                                 : std::vector<ExpectedAccount>{}}};
+                                 : std::vector<ExpectedAccount>{}},
+                .metadata = value.contains("metadata")
+                                ? metadata(
+                                      value.at("metadata"), path + ".metadata")
+                                : CaseMetadata{}};
             if (parsed.name.empty()) {
                 invalid(path + ".name", "must not be empty");
             }

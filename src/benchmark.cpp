@@ -6,6 +6,7 @@
 #include <category/core/hex.hpp>
 
 #include <benchmark/benchmark.h>
+#include <nlohmann/json.hpp>
 
 #include <charconv>
 #include <cstdint>
@@ -289,7 +290,25 @@ namespace monad_execbench
                     static_cast<double>(sample.output_size);
                 state.counters["log_count"] =
                     static_cast<double>(sample.log_count);
-                state.SetLabel(replay_case.expected.status);
+                for (auto const &counter : replay_case.metadata.counters) {
+                    state.counters[counter.name] = counter.benchmark_value;
+                }
+                nlohmann::json label{{"status", replay_case.expected.status}};
+                if (!replay_case.metadata.labels.empty()) {
+                    auto &labels = label["labels"];
+                    for (auto const &[key, value] :
+                         replay_case.metadata.labels) {
+                        labels[key] = value;
+                    }
+                }
+                if (!replay_case.metadata.counters.empty()) {
+                    auto &counters = label["counters"];
+                    for (auto const &counter :
+                         replay_case.metadata.counters) {
+                        counters[counter.name] = counter.exact_value;
+                    }
+                }
+                state.SetLabel(label.dump());
             }
         }
     }

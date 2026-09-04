@@ -77,11 +77,25 @@ namespace monad_execbench
         std::vector<ExpectedAccount> state{};
     };
 
+    struct CaseCounter
+    {
+        std::string name{};
+        std::string exact_value{};
+        double benchmark_value{};
+    };
+
+    struct CaseMetadata
+    {
+        std::vector<std::pair<std::string, std::string>> labels{};
+        std::vector<CaseCounter> counters{};
+    };
+
     struct ReplayCase
     {
         std::string name{};
         MessageFixture message{};
         ExpectedResult expected{};
+        CaseMetadata metadata{};
     };
 
     struct FixtureSuite
