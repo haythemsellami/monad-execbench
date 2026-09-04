@@ -89,6 +89,49 @@
             "$ref": "#/$defs/accessListEntry"
           },
           "default": []
+        },
+        "metadata": {
+          "$ref": "#/$defs/metadata"
+        }
+      }
+    },
+    "metadataKey": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_.-]{0,63}$"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "labels": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/metadataKey"
+          },
+          "additionalProperties": {
+            "type": "string"
+          },
+          "minProperties": 1
+        },
+        "counters": {
+          "type": "object",
+          "propertyNames": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/metadataKey"
+              },
+              {
+                "not": {
+                  "enum": ["execution_gas", "return_data_bytes", "log_count"]
+                }
+              }
+            ]
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/quantity"
+          },
+          "minProperties": 1
         }
       }
     }

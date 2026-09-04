@@ -111,6 +111,61 @@ class CaptureTest(unittest.TestCase):
         with self.assertRaisesRegex(CaptureError, "unknown field 'data'"):
             capture_suite(FakeRpc(), calls)
 
+    def test_capture_normalizes_case_metadata(self) -> None:
+        calls = {
+            "schema": CALLS_SCHEMA,
+            "cases": [
+                {
+                    "name": "example/metadata",
+                    "from": SENDER,
+                    "to": TARGET,
+                    "metadata": {
+                        "labels": {
+                            "implementation": "example-a",
+                            "candidate_set": "all",
+                        },
+                        "counters": {"amount_in": "0xde0b6b3a7640000"},
+                    },
+                }
+            ],
+        }
+        bundle = capture_suite(FakeRpc(), calls)
+        self.assertEqual(
+            bundle.cases[0]["metadata"],
+            {
+                "labels": {
+                    "candidate_set": "all",
+                    "implementation": "example-a",
+                },
+                "counters": {"amount_in": "1000000000000000000"},
+            },
+        )
+
+    def test_capture_rejects_invalid_metadata(self) -> None:
+        base = {
+            "name": "example/metadata",
+            "from": SENDER,
+            "to": TARGET,
+        }
+        invalid_metadata = [
+            ({}, "expected at least one label or counter"),
+            ({"labels": {"bad key": "x"}}, "invalid metadata key"),
+            ({"labels": {"valid": 1}}, "expected a string"),
+            (
+                {"counters": {"execution_gas": 1}},
+                "counter name is reserved",
+            ),
+            ({"counters": {"amount": -1}}, "expected an unsigned quantity"),
+        ]
+        for metadata, expected in invalid_metadata:
+            with self.subTest(metadata=metadata):
+                calls = {
+                    "schema": CALLS_SCHEMA,
+                    "cases": [{**base, "metadata": metadata}],
+                }
+                with self.assertRaisesRegex(CaptureError, expected):
+                    capture_suite(FakeRpc(), calls)
+
     def test_derive_execution_gas_removes_intrinsic_gas(self) -> None:
         self.assertEqual(
             derive_execution_gas(
