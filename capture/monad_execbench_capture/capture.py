@@ -644,6 +644,10 @@ def sha256(value: bytes) -> str:
     return "0x" + hashlib.sha256(value).hexdigest()
 
 
+def bundle_sha256(*hashes: str) -> str:
+    return sha256("".join(hashes).encode())
+
+
 def write_bundle(
     output: Path,
     bundle: CaptureBundle,
@@ -670,6 +674,10 @@ def write_bundle(
     state_compressed = zstandard.ZstdCompressor(
         level=10, write_content_size=True
     ).compress(state_bytes)
+    manifest_sha256 = sha256(manifest_bytes)
+    cases_sha256 = sha256(cases_bytes)
+    state_file_sha256 = sha256(state_compressed)
+    normalized_state_sha256 = sha256(state_bytes)
     provenance = {
         "schema": PROVENANCE_SCHEMA,
         "createdAt": created_at
@@ -689,11 +697,18 @@ def write_bundle(
         },
         "inputs": {"callsSha256": sha256(calls_bytes)},
         "files": {
-            "manifest.json": sha256(manifest_bytes),
-            "cases.json": sha256(cases_bytes),
-            "state.json.zst": sha256(state_compressed),
+            "manifest.json": manifest_sha256,
+            "cases.json": cases_sha256,
+            "state.json.zst": state_file_sha256,
         },
-        "normalized": {"stateSha256": sha256(state_bytes)},
+        "normalized": {
+            "manifestSha256": manifest_sha256,
+            "casesSha256": cases_sha256,
+            "stateSha256": normalized_state_sha256,
+            "bundleSha256": bundle_sha256(
+                manifest_sha256, cases_sha256, normalized_state_sha256
+            ),
+        },
     }
 
     temporary = Path(tempfile.mkdtemp(prefix=f".{output.name}.", dir=output.parent))

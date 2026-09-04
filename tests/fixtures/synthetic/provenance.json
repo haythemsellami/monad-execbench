@@ -1,4 +1,26 @@
 {
-  "kind": "checked-in synthetic fixture",
-  "source": "hand-authored EVM bytecode"
+  "schema": "monad-execbench/provenance-v1",
+  "createdAt": "2026-09-04T00:00:00Z",
+  "source": {
+    "chainId": "143",
+    "blockNumber": "100",
+    "blockHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "executionEnv": "MONAD_TEN",
+  "monadCommit": "aae93c5352510f09640733e58159201d3cbad063",
+  "captureTool": {
+    "name": "hand-authored-fixture",
+    "version": "1"
+  },
+  "files": {
+    "manifest.json": "0x21c476a32280421072986c0ebc370d5f053c1b1a1eef31ed2e1c628ff1127e2f",
+    "cases.json": "0x0e471634df14894917f927ff39df94bb9f069a08227a2b8fc4dfac461b8bc3d8f",
+    "state.json": "0x28576f19a5f3b9bea11298be20bad9495e14f3b7eb68b394ab3cdbd06ec589fb"
+  },
+  "normalized": {
+    "manifestSha256": "0x21c476a32280421072986c0ebc370d5f053c1b1a1eef31ed2e1c628ff1127e2f",
+    "casesSha256": "0x0e471634df14894917f927ff39df94bb9f069a08227a2b8fc4dfac461b8bc3d8f",
+    "stateSha256": "0x28576f19a5f3b9bea11298be20bad9495e14f3b7eb68b394ab3cdbd06ec589fb",
+    "bundleSha256": "0xce16f8dc6b334a092ea00274568bd9a13ca2b6abfea91e4249475207d83b20e8"
+  }
 }

@@ -1,6 +1,7 @@
 #include <monad-execbench/benchmark.hpp>
 
 #include <monad-execbench/fixture.hpp>
+#include <monad-execbench/hash.hpp>
 #include <monad-execbench/replay.hpp>
 
 #include <category/core/hex.hpp>
@@ -217,12 +218,29 @@ namespace monad_execbench
             benchmark::AddCustomContext(
                 "monad_commit", MONAD_EXECBENCH_MONAD_COMMIT);
             benchmark::AddCustomContext(
+                "runner_sha256", sha256_file("/proc/self/exe"));
+            benchmark::AddCustomContext(
                 "build_type", MONAD_EXECBENCH_BUILD_TYPE);
             benchmark::AddCustomContext(
                 "compiler",
                 std::string{MONAD_EXECBENCH_CXX_COMPILER_ID} + " " +
                     MONAD_EXECBENCH_CXX_COMPILER_VERSION);
             benchmark::AddCustomContext("fixture_schema", suite.schema);
+            benchmark::AddCustomContext(
+                "fixture_bundle_sha256", suite.provenance.bundle_sha256);
+            benchmark::AddCustomContext(
+                "fixture_manifest_sha256", suite.provenance.manifest_sha256);
+            benchmark::AddCustomContext(
+                "fixture_cases_sha256", suite.provenance.cases_sha256);
+            benchmark::AddCustomContext(
+                "fixture_state_sha256",
+                suite.provenance.normalized_state_sha256);
+            benchmark::AddCustomContext(
+                "fixture_created_at", suite.provenance.created_at);
+            benchmark::AddCustomContext(
+                "capture_tool",
+                suite.provenance.capture_tool + " " +
+                    suite.provenance.capture_version);
             benchmark::AddCustomContext(
                 "fixture_directory", suite.directory.string());
             benchmark::AddCustomContext("execution_env", suite.execution_env);

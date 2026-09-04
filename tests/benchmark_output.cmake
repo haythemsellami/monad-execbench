@@ -45,6 +45,12 @@ string(JSON runner_commit GET "${report}" context monad_execbench_commit)
 if(runner_commit STREQUAL "")
   message(FATAL_ERROR "benchmark report omitted the runner commit")
 endif()
+string(JSON runner_sha256 GET "${report}" context runner_sha256)
+string(JSON fixture_sha256 GET "${report}" context fixture_bundle_sha256)
+if(NOT runner_sha256 MATCHES "^0x[0-9a-f]+$" OR
+   NOT fixture_sha256 MATCHES "^0x[0-9a-f]+$")
+  message(FATAL_ERROR "benchmark report omitted reproducibility hashes")
+endif()
 
 string(JSON benchmark_count LENGTH "${report}" benchmarks)
 set(raw_repetitions 0)

@@ -17,6 +17,8 @@
 namespace monad_execbench
 {
     inline constexpr char schema_v1[] = "monad-execbench/v1";
+    inline constexpr char provenance_schema_v1[] =
+        "monad-execbench/provenance-v1";
     inline constexpr char default_execution_env[] = "MONAD_TEN";
 
     struct StorageSlot
@@ -98,6 +100,20 @@ namespace monad_execbench
         CaseMetadata metadata{};
     };
 
+    struct FixtureProvenance
+    {
+        std::string schema{};
+        std::string created_at{};
+        std::string monad_commit{};
+        std::string capture_tool{};
+        std::string capture_version{};
+        std::string manifest_sha256{};
+        std::string cases_sha256{};
+        std::string state_file_sha256{};
+        std::string normalized_state_sha256{};
+        std::string bundle_sha256{};
+    };
+
     struct FixtureSuite
     {
         std::filesystem::path directory{};
@@ -108,6 +124,7 @@ namespace monad_execbench
         std::vector<AccountFixture> accounts{};
         std::vector<monad::Address> absent_accounts{};
         std::vector<ReplayCase> cases{};
+        FixtureProvenance provenance{};
     };
 
     FixtureSuite load_fixture_suite(std::filesystem::path const &directory);

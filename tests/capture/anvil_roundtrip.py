@@ -77,6 +77,16 @@ def calls_document() -> dict[str, object]:
     }
 
 
+def pinned_monad_commit() -> str:
+    repository = Path(__file__).resolve().parents[2]
+    return subprocess.run(
+        ["git", "-C", repository / "third_party" / "monad", "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--anvil", default="anvil")
@@ -105,7 +115,7 @@ def main() -> int:
                     fixture,
                     bundle,
                     calls_bytes=calls_bytes,
-                    monad_commit="integration-test",
+                    monad_commit=pinned_monad_commit(),
                     capture_version=__version__,
                     created_at="2026-01-01T00:00:00Z",
                 )

@@ -13,6 +13,7 @@ from monad_execbench_capture.capture import (
     EMPTY_STORAGE_ROOT,
     CaptureBundle,
     CaptureError,
+    bundle_sha256,
     capture_suite,
     collect_logs,
     derive_execution_gas,
@@ -283,6 +284,14 @@ class CaptureTest(unittest.TestCase):
                 provenance["normalized"]["stateSha256"],
                 sha256(
                     (json.dumps(bundle.state, indent=2, sort_keys=True) + "\n").encode()
+                ),
+            )
+            self.assertEqual(
+                provenance["normalized"]["bundleSha256"],
+                bundle_sha256(
+                    provenance["normalized"]["manifestSha256"],
+                    provenance["normalized"]["casesSha256"],
+                    provenance["normalized"]["stateSha256"],
                 ),
             )
 

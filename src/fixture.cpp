@@ -1,4 +1,5 @@
 #include <monad-execbench/fixture.hpp>
+#include <monad-execbench/hash.hpp>
 
 #include <category/core/hex.hpp>
 #include <category/core/keccak.hpp>
@@ -30,7 +31,10 @@ namespace monad_execbench
                 "invalid fixture at " + path + ": " + message};
         }
 
-        json read_json(std::filesystem::path const &path)
+        json read_json(
+            std::filesystem::path const &path,
+            std::string *encoded_payload = nullptr,
+            std::string *decoded_payload = nullptr)
         {
             std::error_code file_size_error;
             auto const file_size =
@@ -60,6 +64,9 @@ namespace monad_execbench
                 input.peek() != std::ifstream::traits_type::eof()) {
                 throw std::runtime_error{
                     "fixture file changed while reading: " + path.string()};
+            }
+            if (encoded_payload != nullptr) {
+                *encoded_payload = payload;
             }
             if (path.extension() == ".zst") {
                 auto const size =
@@ -92,6 +99,9 @@ namespace monad_execbench
                         ": " + ZSTD_getErrorName(result)};
                 }
                 payload = std::move(decompressed);
+            }
+            if (decoded_payload != nullptr) {
+                *decoded_payload = payload;
             }
 
             try {
@@ -490,6 +500,156 @@ namespace monad_execbench
             }
             return result;
         }
+
+        std::string required_sha256(
+            json const &object, char const *key, std::string const &path)
+        {
+            auto const result = required_string(object, key, path);
+            if (result.size() != 66 || !result.starts_with("0x") ||
+                !std::all_of(
+                    result.begin() + 2,
+                    result.end(),
+                    [](unsigned char character) {
+                        return (character >= '0' && character <= '9') ||
+                               (character >= 'a' && character <= 'f');
+                    })) {
+                invalid(
+                    path + "." + key,
+                    "expected a lowercase 0x-prefixed SHA-256 digest");
+            }
+            return result;
+        }
+
+        void require_matching_hash(
+            json const &object, char const *key, std::string const &actual,
+            std::string const &path)
+        {
+            auto const declared = required_sha256(object, key, path);
+            if (declared != actual) {
+                invalid(path + "." + key, "does not match fixture content");
+            }
+        }
+
+        FixtureProvenance validate_provenance(
+            json const &value, FixtureSuite const &suite,
+            std::string const &manifest_payload,
+            std::string const &cases_payload,
+            std::string const &state_file_payload,
+            std::string const &state_payload, std::string const &cases_name,
+            std::string const &state_name)
+        {
+            if (!value.is_object()) {
+                invalid("provenance", "expected an object");
+            }
+            FixtureProvenance result{
+                .schema = required_string(value, "schema", "provenance"),
+                .created_at = required_string(value, "createdAt", "provenance"),
+                .monad_commit =
+                    required_string(value, "monadCommit", "provenance")};
+            if (result.schema != provenance_schema_v1) {
+                invalid(
+                    "provenance.schema", "unsupported schema " + result.schema);
+            }
+            if (result.created_at.empty()) {
+                invalid("provenance.createdAt", "must not be empty");
+            }
+            if (result.monad_commit != MONAD_EXECBENCH_MONAD_COMMIT) {
+                invalid(
+                    "provenance.monadCommit",
+                    "does not match runner Monad commit " +
+                        std::string{MONAD_EXECBENCH_MONAD_COMMIT});
+            }
+
+            auto const &source = *required_field(value, "source", "provenance");
+            if (uint256(
+                    *required_field(source, "chainId", "provenance.source"),
+                    "provenance.source.chainId") != suite.chain_id) {
+                invalid(
+                    "provenance.source.chainId",
+                    "does not match manifest chain ID");
+            }
+            if (uint64(
+                    *required_field(source, "blockNumber", "provenance.source"),
+                    "provenance.source.blockNumber") != suite.block.number) {
+                invalid(
+                    "provenance.source.blockNumber",
+                    "does not match manifest block number");
+            }
+            if (fixed_hex<monad::bytes32_t>(
+                    *required_field(source, "blockHash", "provenance.source"),
+                    "provenance.source.blockHash") != suite.block.hash) {
+                invalid(
+                    "provenance.source.blockHash",
+                    "does not match manifest block hash");
+            }
+            if (required_string(value, "executionEnv", "provenance") !=
+                suite.execution_env) {
+                invalid(
+                    "provenance.executionEnv",
+                    "does not match manifest execution environment");
+            }
+
+            auto const &capture_tool =
+                *required_field(value, "captureTool", "provenance");
+            result.capture_tool =
+                required_string(capture_tool, "name", "provenance.captureTool");
+            result.capture_version = required_string(
+                capture_tool, "version", "provenance.captureTool");
+            if (result.capture_tool.empty() || result.capture_version.empty()) {
+                invalid(
+                    "provenance.captureTool",
+                    "name and version must not be empty");
+            }
+
+            result.manifest_sha256 = sha256_hex(manifest_payload);
+            result.cases_sha256 = sha256_hex(cases_payload);
+            result.state_file_sha256 = sha256_hex(state_file_payload);
+            result.normalized_state_sha256 = sha256_hex(state_payload);
+            result.bundle_sha256 = sha256_hex(
+                result.manifest_sha256 + result.cases_sha256 +
+                result.normalized_state_sha256);
+
+            auto const &files = *required_field(value, "files", "provenance");
+            require_matching_hash(
+                files,
+                "manifest.json",
+                result.manifest_sha256,
+                "provenance.files");
+            require_matching_hash(
+                files,
+                cases_name.c_str(),
+                result.cases_sha256,
+                "provenance.files");
+            require_matching_hash(
+                files,
+                state_name.c_str(),
+                result.state_file_sha256,
+                "provenance.files");
+
+            auto const &normalized =
+                *required_field(value, "normalized", "provenance");
+            require_matching_hash(
+                normalized,
+                "manifestSha256",
+                result.manifest_sha256,
+                "provenance.normalized");
+            require_matching_hash(
+                normalized,
+                "casesSha256",
+                result.cases_sha256,
+                "provenance.normalized");
+            require_matching_hash(
+                normalized,
+                "stateSha256",
+                result.normalized_state_sha256,
+                "provenance.normalized");
+            require_matching_hash(
+                normalized,
+                "bundleSha256",
+                result.bundle_sha256,
+                "provenance.normalized");
+            return result;
+        }
     }
 
     FixtureSuite load_fixture_suite(std::filesystem::path const &directory)
@@ -502,7 +662,9 @@ namespace monad_execbench
                 normalized_directory.string()};
         }
 
-        auto const manifest = read_json(normalized_directory / "manifest.json");
+        std::string manifest_payload;
+        auto const manifest = read_json(
+            normalized_directory / "manifest.json", &manifest_payload);
         FixtureSuite suite{
             .directory = normalized_directory,
             .schema = required_string(manifest, "schema", "manifest")};
@@ -580,8 +742,15 @@ namespace monad_execbench
             }
         }
 
-        auto const state_json = read_json(referenced_file(
-            normalized_directory, manifest, "state", "state.json.zst"));
+        auto const state_path = referenced_file(
+            normalized_directory, manifest, "state", "state.json.zst");
+        auto const state_name =
+            state_path.lexically_relative(normalized_directory)
+                .generic_string();
+        std::string state_file_payload;
+        std::string state_payload;
+        auto const state_json =
+            read_json(state_path, &state_file_payload, &state_payload);
         auto const &accounts = *required_field(state_json, "accounts", "state");
         if (!accounts.is_object()) {
             invalid("state.accounts", "expected an object");
@@ -643,8 +812,13 @@ namespace monad_execbench
             }
         }
 
-        auto const cases_json = read_json(referenced_file(
-            normalized_directory, manifest, "cases", "cases.json"));
+        auto const cases_path = referenced_file(
+            normalized_directory, manifest, "cases", "cases.json");
+        auto const cases_name =
+            cases_path.lexically_relative(normalized_directory)
+                .generic_string();
+        std::string cases_payload;
+        auto const cases_json = read_json(cases_path, &cases_payload);
         if (!cases_json.is_array() || cases_json.empty()) {
             invalid("cases", "expected a non-empty array");
         }
@@ -750,9 +924,15 @@ namespace monad_execbench
 
         auto const provenance_path = normalized_directory / "provenance.json";
         auto const provenance = read_json(provenance_path);
-        if (!provenance.is_object()) {
-            invalid("provenance", "expected an object");
-        }
+        suite.provenance = validate_provenance(
+            provenance,
+            suite,
+            manifest_payload,
+            cases_payload,
+            state_file_payload,
+            state_payload,
+            cases_name,
+            state_name);
 
         return suite;
     }

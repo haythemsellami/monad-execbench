@@ -71,6 +71,7 @@ add_executable(
   monad-execbench
   src/benchmark.cpp
   src/fixture.cpp
+  src/hash.cpp
   src/main.cpp
   src/replay.cpp)
 
@@ -91,6 +92,7 @@ target_link_libraries(
   monad-execbench
   PRIVATE benchmark::benchmark
           evmc::mocked_host
+          monad_crypto
           monad_execution)
 
 include(CTest)
