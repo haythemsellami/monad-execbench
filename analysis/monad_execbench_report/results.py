@@ -35,21 +35,25 @@ TEXT_FIELDS = (
     "library_build_type",
 )
 # Differences in these fields must never be hidden inside an implementation ratio.
-COMPARABILITY_FIELDS = (
-    HASH_FIELDS
-    + TEXT_FIELDS[:7]
-    + (
-        "execution_env",
-        "benchmark_mode",
-        "block_number",
-        "host_name",
-        "num_cpus",
-        "mhz_per_cpu",
-        "caches",
-        "cpu_scaling_enabled",
-        "library_version",
-        "library_build_type",
-    )
+COMPARABILITY_FIELDS = HASH_FIELDS + (
+    "monad_execbench_version",
+    "monad_execbench_commit",
+    "monad_commit",
+    "build_type",
+    "compiler",
+    "fixture_schema",
+    "fixture_created_at",
+    "capture_tool",
+    "execution_env",
+    "benchmark_mode",
+    "block_number",
+    "host_name",
+    "num_cpus",
+    "mhz_per_cpu",
+    "caches",
+    "cpu_scaling_enabled",
+    "library_version",
+    "library_build_type",
 )
 METRICS = ("execution_gas", "return_data_bytes", "log_count")
 COMPARISON_SCHEMA = "monad-execbench/comparisons-v1"
@@ -85,7 +89,10 @@ def _float(value: str) -> float:
 def parse_json(data: bytes | str) -> Any:
     try:
         return json.loads(
-            data, object_pairs_hook=_object, parse_constant=_constant, parse_float=_float
+            data,
+            object_pairs_hook=_object,
+            parse_constant=_constant,
+            parse_float=_float,
         )
     except (ValueError, UnicodeError, RecursionError) as error:
         raise ReportError(f"invalid JSON: {error}") from error
@@ -342,7 +349,8 @@ def load_run(alias: str, path: Path) -> Run:
         require(match is not None, f"unsupported benchmark run_name: {run_name}")
         assert match is not None
         require(
-            match[1] == context["benchmark_mode"] and int(match[3]) == repetitions,
+            match[1] == context["benchmark_mode"]
+            and decimal_string(match[3], "run_name repetitions") == repetitions,
             f"{run_name}: mode or repetition count disagrees with context",
         )
         name = match[2]

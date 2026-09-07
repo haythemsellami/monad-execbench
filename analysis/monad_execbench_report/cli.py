@@ -122,6 +122,6 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(f"report={output}")
         return 0
-    except (ReportError, OSError) as error:
+    except (ReportError, OSError, UnicodeError) as error:
         print(f"report failed: {error}", file=sys.stderr)
         return 1

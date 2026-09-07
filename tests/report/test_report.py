@@ -170,6 +170,19 @@ class ReportTest(unittest.TestCase):
                     self.load(value).cases["implementation-a/size-10"].wall.median, 2
                 )
 
+    def test_even_sample_count_and_missing_aggregate_groups(self):
+        value = document(count=4)
+        self.assertEqual(
+            self.load(value).cases["implementation-a/size-10"].wall.median, 2.5
+        )
+        value["benchmarks"] = value["benchmarks"][5:]
+        # A complete case can legitimately be absent in filtered output.
+        self.assertEqual(len(self.load(value).cases), 1)
+        orphan = document(count=4)["benchmarks"][4]
+        value["benchmarks"].append(orphan)
+        with self.assertRaisesRegex(ReportError, "no corresponding raw repetitions"):
+            self.load(value)
+
     def test_metadata_uses_exact_large_counter(self):
         value = document()
         exact = str(2**200 + 1)
@@ -435,6 +448,30 @@ class ReportTest(unittest.TestCase):
         self.write(self.path, value)
         self.assertEqual(self.cli("--force")[0], 1)
         self.assertEqual(self.output.read_text(), "previous report")
+
+    def test_symlink_and_comparison_manifest_cannot_be_overwritten(self):
+        original = self.pairs.read_bytes()
+        status, output = self.cli(
+            "--comparisons", str(self.pairs), "--output", str(self.pairs), "--force"
+        )
+        self.assertEqual(status, 1, output)
+        self.assertEqual(self.pairs.read_bytes(), original)
+        self.output.symlink_to(self.path)
+        self.assertEqual(self.cli("--force")[0], 1)
+        self.assertTrue(self.output.is_symlink())
+
+    def test_encoding_failure_and_oversized_repetition_fail_cleanly(self):
+        self.output.write_text("previous report")
+        self.assertEqual(self.cli("--title", "invalid\ud800", "--force")[0], 1)
+        self.assertEqual(self.output.read_text(), "previous report")
+        value = document()
+        value["benchmarks"][0]["run_name"] = (
+            "execute/dual-hot/example/repeats:" + "9" * 5000
+        )
+        self.write(self.path, value)
+        status, output = self.cli("--force")
+        self.assertEqual(status, 1)
+        self.assertIn("too large", output)
 
     def test_failed_publish_cleans_temporary_file(self):
         self.output.write_text("previous report")
