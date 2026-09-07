@@ -120,6 +120,11 @@ Consumer-specific deployment and state preparation remain in the consumer reposi
 
 ### 4.4 Analysis tooling
 
+The [offline reporting command](reporting.md) implements per-case distributions,
+explicit gas/timing comparisons, exact metadata, provenance, and quality
+warnings from saved JSON. Hardware-counter collection, flamegraphs, opcode and
+call-frame attribution, and source mapping remain follow-up work.
+
 Analysis scripts will consume raw benchmark output and generate:
 
 - Per-case median, minimum, maximum, mean, and dispersion.

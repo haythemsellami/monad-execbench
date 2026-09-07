@@ -83,6 +83,25 @@ selected Google Benchmark options. See the
 [direct-VM benchmarking guide](docs/benchmarking.md) for timing boundaries,
 cache semantics, result fields, and host preparation.
 
+## Markdown reports
+
+After installing the Python utilities with `python -m pip install -e .`, turn
+saved results into a contract-agnostic report without executing any benchmarks:
+
+```bash
+monad-execbench-report \
+  --input dual=results/dual-hot.json \
+  --input interpreter=results/interpreter-hot.json \
+  --output results/report.md
+```
+
+Reports contain per-case gas, wall/CPU distributions, exact metadata, recorded
+provenance, and measurement-quality warnings. An optional `--comparisons` JSON
+manifest selects explicit baseline/candidate pairs for gas and timing ratios;
+incompatible modes, fixtures, builds, or hosts cannot be silently compared.
+See the [reporting guide](docs/reporting.md) for pairing, statistical conventions,
+validation rules, and limitations.
+
 ## Capture utility
 
 The Python capture utility converts generic EVM call descriptions into
