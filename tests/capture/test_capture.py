@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import zstandard
 from monad_execbench_capture.capture import (
@@ -14,6 +15,7 @@ from monad_execbench_capture.capture import (
     CaptureBundle,
     CaptureError,
     bundle_sha256,
+    capture_block_hashes,
     capture_suite,
     collect_logs,
     derive_execution_gas,
@@ -21,6 +23,7 @@ from monad_execbench_capture.capture import (
     sha256,
     write_bundle,
 )
+from monad_execbench_capture.rpc import RpcError
 
 ZERO_ADDRESS = "0x" + "00" * 20
 SENDER = "0x" + "11" * 20
@@ -181,35 +184,71 @@ class CaptureTest(unittest.TestCase):
                 1 << 63, {"gas": hex(1 << 63), "gasUsed": "0x0"}, "trace"
             )
 
-    def test_collect_logs_ignores_reverted_frames_and_orders_positions(self) -> None:
+    def test_collect_logs_interleaves_frame_local_positions(self) -> None:
         topic = "0x" + "44" * 32
         logs = collect_logs(
             {
                 "logs": [
                     {
                         "address": TARGET,
-                        "data": "0x02",
+                        "data": "0x01",
                         "topics": [topic],
+                        "position": "0x0",
+                    },
+                    {
+                        "address": TARGET,
+                        "data": "0x06",
+                        "topics": [],
+                        "position": "0x1",
+                    },
+                    {
+                        "address": TARGET,
+                        "data": "0x08",
+                        "topics": [],
                         "position": "0x2",
-                    }
+                    },
                 ],
                 "calls": [
                     {
                         "logs": [
                             {
                                 "address": SENDER,
-                                "data": "0x01",
+                                "data": "0x02",
+                                "topics": [],
+                                "position": "0x0",
+                            },
+                            {
+                                "address": SENDER,
+                                "data": "0x03",
+                                "topics": [],
+                                "position": "0x0",
+                            },
+                            {
+                                "address": SENDER,
+                                "data": "0x05",
                                 "topics": [],
                                 "position": "0x1",
+                            },
+                        ],
+                        "calls": [
+                            {
+                                "logs": [
+                                    {
+                                        "address": TARGET,
+                                        "data": "0x04",
+                                        "topics": [],
+                                        "position": "0x0",
+                                    }
+                                ]
                             }
-                        ]
+                        ],
                     },
                     {
                         "error": "execution reverted",
                         "logs": [
                             {
                                 "address": ZERO_ADDRESS,
-                                "data": "0xff",
+                                "data": "0x07",
                                 "topics": [],
                                 "position": "0x0",
                             }
@@ -218,7 +257,92 @@ class CaptureTest(unittest.TestCase):
                 ],
             }
         )
-        self.assertEqual([entry["data"] for entry in logs], ["0x01", "0x02"])
+        self.assertEqual(
+            [entry["data"] for entry in logs],
+            ["0x01", "0x02", "0x03", "0x04", "0x05", "0x06", "0x08"],
+        )
+
+    def test_collect_logs_requires_frame_local_position(self) -> None:
+        with self.assertRaisesRegex(CaptureError, "required for callTracer"):
+            collect_logs({"logs": [{"address": TARGET, "data": "0x", "topics": []}]})
+
+    def test_collect_logs_rejects_out_of_range_position(self) -> None:
+        with self.assertRaisesRegex(CaptureError, "value from 0 to 0"):
+            collect_logs(
+                {
+                    "logs": [
+                        {
+                            "address": TARGET,
+                            "data": "0x",
+                            "topics": [],
+                            "position": "0x1",
+                        }
+                    ]
+                }
+            )
+
+    def test_capture_block_hashes_retries_a_missing_batch_item(self) -> None:
+        class BlockRpc:
+            calls = 0
+
+            def batch(self, method: str, params: list[list[Any]]) -> list[Any]:
+                self.assert_request(method, params)
+                return [
+                    {"number": "0x0", "hash": BLOCK_HASH},
+                    None,
+                ]
+
+            def call(self, method: str, params: list[Any]) -> Any:
+                self.assert_request(method, [params])
+                self.calls += 1
+                return {"number": "0x1", "hash": PARENT_HASH}
+
+            @staticmethod
+            def assert_request(method: str, params: list[list[Any]]) -> None:
+                if method != "eth_getBlockByNumber" or any(
+                    item[1] is not False for item in params
+                ):
+                    raise AssertionError(f"unexpected request: {method} {params}")
+
+        rpc = BlockRpc()
+        self.assertEqual(
+            capture_block_hashes(rpc, 2),
+            {"0": BLOCK_HASH, "1": PARENT_HASH},
+        )
+        self.assertEqual(rpc.calls, 1)
+
+    @patch("monad_execbench_capture.capture.time.sleep")
+    def test_capture_block_hashes_bounds_retries(self, sleep: Any) -> None:
+        class BlockRpc:
+            calls = 0
+
+            def batch(self, method: str, params: list[list[Any]]) -> list[Any]:
+                return [None]
+
+            def call(self, method: str, params: list[Any]) -> Any:
+                self.calls += 1
+                return None
+
+        rpc = BlockRpc()
+        with self.assertRaisesRegex(
+            CaptureError, "blockHashes.0: unavailable after 5 attempts"
+        ):
+            capture_block_hashes(rpc, 1)
+        self.assertEqual(rpc.calls, 5)
+        self.assertEqual(sleep.call_count, 4)
+
+    @patch("monad_execbench_capture.capture.time.sleep")
+    def test_capture_block_hashes_rejects_wrong_number(self, sleep: Any) -> None:
+        class BlockRpc:
+            def batch(self, method: str, params: list[list[Any]]) -> list[Any]:
+                raise RpcError("batch item failed")
+
+            def call(self, method: str, params: list[Any]) -> Any:
+                return {"number": "0x1", "hash": BLOCK_HASH}
+
+        with self.assertRaisesRegex(CaptureError, "expected 0, got 1"):
+            capture_block_hashes(BlockRpc(), 1)
+        self.assertEqual(sleep.call_count, 4)
 
     def test_capture_suite_normalizes_a_successful_call(self) -> None:
         calls = {

@@ -13,6 +13,7 @@ from pathlib import Path
 from monad_execbench_capture import __version__
 from monad_execbench_capture.capture import (
     capture_suite,
+    collect_logs,
     load_calls_document,
     write_bundle,
 )
@@ -91,6 +92,74 @@ def prepare_calls(forge: str, endpoint: str, output: Path) -> bytes:
     return output.read_bytes()
 
 
+def assert_nested_log_order(rpc: RpcClient, calls: dict[str, object]) -> None:
+    cases = calls.get("cases")
+    if not isinstance(cases, list):
+        raise TypeError("call manifest omitted cases")
+    case = next(
+        (
+            item
+            for item in cases
+            if isinstance(item, dict) and item.get("name") == "probe/nested-log-order"
+        ),
+        None,
+    )
+    if case is None:
+        raise RuntimeError("call manifest omitted the nested log-order case")
+
+    message = {
+        "from": case["from"],
+        "to": case["to"],
+        "data": case["input"],
+        "value": hex(int(str(case.get("value", "0")), 0)),
+        "gas": "0x989680",
+    }
+    trace = rpc.call(
+        "debug_traceCall",
+        [
+            message,
+            "latest",
+            {"tracer": "callTracer", "tracerConfig": {"withLog": True}},
+        ],
+    )
+    if not isinstance(trace, dict):
+        raise TypeError("call tracer returned an invalid nested log trace")
+    traced_logs = collect_logs(trace)
+
+    snapshot = rpc.call("evm_snapshot", [])
+    try:
+        transaction_hash = rpc.call("eth_sendTransaction", [message])
+        deadline = time.monotonic() + 5
+        receipt = None
+        while time.monotonic() < deadline:
+            receipt = rpc.call("eth_getTransactionReceipt", [transaction_hash])
+            if isinstance(receipt, dict):
+                break
+            time.sleep(0.01)
+        if not isinstance(receipt, dict):
+            raise TimeoutError("nested log-order transaction receipt timed out")
+        if receipt.get("status") != "0x1":
+            raise RuntimeError(
+                "nested log-order transaction failed: "
+                f"status={receipt.get('status')} gasUsed={receipt.get('gasUsed')}"
+            )
+        receipt_logs = [
+            {
+                "address": str(log["address"]).lower(),
+                "data": str(log.get("data", "0x")).lower(),
+                "topics": [str(topic).lower() for topic in log["topics"]],
+            }
+            for log in receipt.get("logs", [])
+        ]
+        if traced_logs != receipt_logs:
+            raise RuntimeError(
+                "reconstructed callTracer logs did not match transaction receipt order"
+            )
+    finally:
+        if not rpc.call("evm_revert", [snapshot]):
+            raise RuntimeError("failed to restore Anvil snapshot")
+
+
 def run_benchmark(verifier: Path, fixture: Path, output: Path) -> None:
     result = subprocess.run(
         [
@@ -123,8 +192,8 @@ def run_benchmark(verifier: Path, fixture: Path, output: Path) -> None:
     iterations = [
         entry for entry in report["benchmarks"] if entry["run_type"] == "iteration"
     ]
-    if len(iterations) != 12:
-        raise RuntimeError("benchmark report did not contain two runs for six cases")
+    if len(iterations) != 14:
+        raise RuntimeError("benchmark report did not contain two runs for seven cases")
     metadata_runs = [
         entry for entry in iterations if "probe/storage-read" in entry["name"]
     ]
@@ -172,6 +241,7 @@ def main() -> int:
                 calls_path = Path(directory) / "calls.json"
                 calls_bytes = prepare_calls(arguments.forge, endpoint, calls_path)
                 calls = load_calls_document(calls_bytes)
+                assert_nested_log_order(rpc, calls)
                 bundle = capture_suite(rpc, calls)
                 fixture = Path(directory) / "fixture"
                 write_bundle(
@@ -193,7 +263,7 @@ def main() -> int:
                     failed = True
                     print(result.stderr, end="", file=sys.stderr)
                     return result.returncode
-                if "cases=6\nverification=passed\n" not in result.stdout:
+                if "cases=7\nverification=passed\n" not in result.stdout:
                     raise RuntimeError("verifier did not report the expected summary")
                 run_benchmark(
                     arguments.verifier,
