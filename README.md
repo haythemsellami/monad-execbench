@@ -2,7 +2,10 @@
 
 `monad-execbench` is a contract-agnostic tool for replaying and benchmarking arbitrary EVM calls with the production Monad C++ execution engine.
 
-The project is under active development. The implementation is guided by [the project specification](docs/spec.md).
+The project is preparing its first pre-1.0 release. Capture, verified offline
+replay, warmed direct-VM timing, and Markdown reports are implemented. Profiling
+and extended benchmark modes remain planned. See the [support and release
+policy](docs/releases.md) and [project specification](docs/spec.md).
 
 ## Architecture
 
@@ -30,7 +33,10 @@ avoids using host packages with different optimization or assertion settings.
 
 ## Platform
 
-The C++ runner targets Linux on an x86-64-v3-compatible CPU. Building the Monad execution dependency requires the compiler and system packages documented by the pinned Monad source. The supported compiler baseline is GCC 15 or Clang 19.
+The C++ runner targets Linux on an x86-64-v3-compatible CPU. Release CI uses
+Ubuntu 26.04, GCC 15, and libstdc++; upstream's Clang 19 support is not yet
+covered by this project's release matrix. Python 3.11+ capture/report tools
+are tested on Linux and macOS. See the [validated baseline](docs/releases.md#supported-baseline).
 
 ## Build
 
@@ -47,6 +53,11 @@ CC=gcc-15 CXX=g++-15 cmake \
 cmake --build build --target monad-execbench --parallel
 ctest --test-dir build --output-on-failure -R monad-execbench
 ```
+
+The [release guide](docs/releases.md#reproduce-checks-locally) provides the
+containerized dependency setup and full correctness workflow. After building,
+`cmake --install build --prefix /path/to/installation --component execbench`
+installs just the runner without upstream projects' install rules.
 
 Run the VM smoke test:
 

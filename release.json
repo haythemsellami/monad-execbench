@@ -1,0 +1,11 @@
+{
+  "version": "0.1.0",
+  "execution_env": "MONAD_TEN",
+  "monad_commit": "aae93c5352510f09640733e58159201d3cbad063",
+  "benchmark_commit": "c58e6d0710581e3a08d65c349664128a8d9a2461",
+  "foundry_version": "v1.8.1",
+  "python_versions_tested": ["3.11", "3.14"],
+  "native_platform": "Linux x86-64-v3",
+  "native_compiler_tested": "GCC 15",
+  "native_build_type": "RelWithDebInfo"
+}

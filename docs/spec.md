@@ -2,19 +2,32 @@
 
 ## Status
 
-Draft implementation specification.
+Implementation and roadmap specification for the `0.1.0` release candidate.
+Implemented: Foundry call preparation, portable capture, offline verification,
+both hot benchmark modes, and Markdown reporting. Correctness CI and release
+preparation are described in the [release policy](releases.md).
+
+Hardware profiling, opcode/call-frame/source attribution, cold execution, and
+transaction/block paths are future work. Goals and sections marked planned
+below describe that roadmap, not features available in the current CLI.
+The fixture, capture, benchmarking, and reporting guides define the current
+interfaces. Release preparation does not itself publish a release.
 
 ## 1. Purpose
 
 `monad-execbench` is an external, contract-agnostic benchmarking tool for measuring an arbitrary EVM call with the production Monad C++ execution engine.
 
-The tool consumes a portable execution bundle containing a block environment, transaction message, account state, and expected result. It executes that bundle directly through the Monad VM and reports execution time, execution gas, CPU counters, opcode attribution, and call-frame attribution.
+The tool consumes a portable execution bundle containing a block environment,
+transaction message, account state, and expected result. It executes that bundle
+directly through the Monad VM and reports wall/process-CPU time, execution gas,
+metadata, and provenance. Hardware counters, opcode attribution, and call-frame
+attribution are planned additions.
 
 Foundry prepares contracts and calls. RPC tracing captures the state needed to replay them. The C++ runner performs the measurement. The runner must not contain hardcoded knowledge of any contract, protocol, address, ABI, function selector, or benchmark input.
 
 ## 2. Goals
 
-The project must:
+The current implementation and longer-term roadmap target these goals:
 
 1. Execute arbitrary supplied EVM messages using the production Monad VM.
 2. Default to `MONAD_TEN` execution semantics and gas accounting.
@@ -55,8 +68,9 @@ monad-execbench C++ runner
               v
 Analysis and reporting
   |-- compares gas and CPU ratios
-  |-- processes perf counters and flamegraphs
-  `-- attributes work to call frames, opcodes, and source
+  |-- records distributions, metadata, and provenance
+  |-- planned: processes perf counters and flamegraphs
+  `-- planned: attributes work to call frames, opcodes, and source
 ```
 
 ## 4. Project components
@@ -94,9 +108,9 @@ The capture utility will collect:
 - Runtime bytecode for every accessed contract.
 - Balances and nonces for every accessed account.
 - Every accessed storage slot and its value.
-- Expected status, return data, execution gas, and selected balance changes.
-- Optional call-trace data for later attribution.
-- Foundry artifact labels, ABIs, source maps, and build metadata when available.
+- Expected status, return data, execution gas, ordered logs, and selected storage/code/nonce changes.
+- Planned: retained call-trace data for later attribution.
+- Planned: ABI/source-map/build-info ingestion; current labels and counters are supplied by the call manifest.
 
 ### 4.3 Foundry integration helper
 
@@ -105,7 +119,9 @@ The repository will provide a small Solidity helper that consumer projects can i
 It will allow a project to register a benchmark case using normal Solidity types and `abi.encodeCall`:
 
 ```solidity
-ExecBench.addCall(
+using ExecBench for ExecBench.Manifest;
+ExecBench.Manifest memory manifest = ExecBench.create(1);
+manifest.addCall(
     "example/case-a",
     caller,
     target,
@@ -139,7 +155,7 @@ Raw data must remain available so generated conclusions can be independently che
 
 ## 5. Foundry integration
 
-### 5.1 Foundry artifacts
+### 5.1 Foundry artifacts (planned enrichment)
 
 The capture utility may consume Foundry artifacts from `out/` to obtain:
 
@@ -154,7 +170,7 @@ Artifacts alone are not sufficient to construct a replay fixture. They do not co
 
 The capture process must obtain actual runtime bytecode from the prepared fork after deployment.
 
-### 5.2 Foundry broadcast output
+### 5.2 Foundry broadcast output (planned enrichment)
 
 When available, `forge script` broadcast output may be used to associate:
 
@@ -210,7 +226,8 @@ fixture-suite/
     `-- contracts/
 ```
 
-The artifact directory is optional. Execution must only require the manifest, cases, state, and provenance. Artifacts enrich attribution and reporting.
+Execution requires only the manifest, cases, state, and provenance. The artifact
+directory is a planned optional enrichment, not a dependency of current replay.
 
 ### 6.3 Manifest example
 
@@ -286,8 +303,11 @@ For each case, the capture stage must save a reference result from the same fork
 - Success or revert status.
 - Return or revert data.
 - Execution gas.
-- Selected account and token balance changes.
-- Optional logs and call-frame tree.
+- Selected storage/code/contract-nonce changes from the reference diff.
+- Ordered logs. Retaining the call-frame tree is planned.
+
+Balance postconditions remain deferred until transaction-envelope effects are
+normalized. Captured prestate still contains account balances needed for replay.
 
 Because capture calls are non-committing, every case starts from the same prepared fork state.
 
@@ -338,7 +358,7 @@ This is the primary diagnostic mode.
 
 This mode supports detailed attribution and provides a compiler-independent correctness comparison.
 
-### 9.3 `dual-cold`
+### 9.3 `dual-cold` (planned)
 
 This is an optional secondary result.
 
@@ -376,7 +396,7 @@ Verification must check:
 - Execution status.
 - Return or revert data.
 - Execution gas.
-- Selected native and token balance changes.
+- Selected storage/code/nonce changes. Native/token balance assertions remain planned.
 - Expected logs when supplied.
 - Complete account and storage access coverage.
 - Interpreter and compiler output agreement.
@@ -388,13 +408,13 @@ Any mismatch must fail the case rather than emit a performance number with a war
 
 ## 12. Command-line interface
 
-The intended workflow is:
+The implemented workflow uses separate Python capture/report entry points and
+the native replay runner:
 
 ```bash
-monad-execbench capture \
+monad-execbench-capture \
   --rpc-url http://127.0.0.1:8545 \
   --calls benchmark-calls.json \
-  --artifacts out \
   --execution-env MONAD_TEN \
   --output fixtures/example-suite
 ```
@@ -446,13 +466,12 @@ The benchmark executable must return a nonzero exit code when fixture verificati
 
 ## 14. Linux performance profiling
 
-The C++ runner must be compatible with external profiling such as:
-
-```bash
-perf stat -r 20 -e \
-  cycles,instructions,branches,branch-misses,cache-references,cache-misses \
-  monad-execbench run fixtures/example-suite --filter 'example/case-a' --mode dual-hot
-```
+Planned: execution-scoped hardware counters and profiling wrappers. Wrapping
+the whole current `run` command with `perf stat` also counts fixture loading,
+verification, cache priming, and state setup/reset. Google Benchmark's paused
+timer does not pause external perf counters. A future profiling mode must
+explicitly isolate the execution region and keep instrumented diagnostics
+separate from headline timings.
 
 `perf record` will be used to generate flamegraphs for cases with meaningful CPU differences.
 
@@ -468,6 +487,8 @@ Primary hardware metrics are:
 Profiling invocations, raw perf data, and generated summaries must record the same fixture and executable hashes as the main benchmark output.
 
 ## 15. Opcode, call-frame, and source attribution
+
+This section is planned work; these diagnostics are not implemented in `0.1.0`.
 
 Interpreter diagnostics may record:
 
@@ -576,7 +597,7 @@ The first usable release is complete when:
 2. A Foundry project can emit arbitrary call cases using the helper.
 3. The capture utility creates a self-contained bundle from a pinned local fork.
 4. The runner executes that bundle offline with production Monad `MONAD_TEN` semantics.
-5. RPC and C++ execution agree on status, output, gas, and configured balance changes.
+5. RPC and C++ execution agree on status, output, gas, ordered logs, and configured storage/code/nonce changes.
 6. Compiler and interpreter modes agree on execution results and gas.
 7. Missing account or storage data causes a hard verification failure.
 8. Hot benchmark iterations start from identical transaction state while retaining the intended code cache.
@@ -585,13 +606,13 @@ The first usable release is complete when:
 
 ## 19. Deferred decisions
 
-The following choices can be finalized during implementation without changing the architecture:
+Resolved choices are documented in the implementation guides: nlohmann JSON,
+compressed JSON state, a standalone Foundry helper, and one Python distribution
+containing separate capture and reporting packages.
 
-- The exact JSON library used by the C++ runner.
-- Whether fixture state is stored as one compressed JSON file or chunked by account.
-- The public packaging mechanism for the Foundry helper.
-- Whether capture and analysis utilities share one Python package.
-- The exact perf/flamegraph wrapper interface.
-- Whether optional cryptographic account/storage proofs are added to fixture provenance.
+Remaining decisions include the execution-scoped perf/flamegraph interface,
+source-map ingestion, normalized balance postconditions, controlled-host
+performance gates, and future native binary distribution. These do not block
+the current source-based release workflow.
 
 None of these decisions may introduce contract-specific behavior into the C++ runner.

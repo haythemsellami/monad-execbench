@@ -1,0 +1,4 @@
+**
+!ci/Dockerfile
+!third_party/monad/scripts/ubuntu-build/install-boost.sh
+!third_party/monad/scripts/ubuntu-build/install-deps.sh

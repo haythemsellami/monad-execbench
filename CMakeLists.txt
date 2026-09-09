@@ -153,4 +153,4 @@ if(BUILD_TESTING)
       -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/benchmark_cli.cmake")
 endif()
 
-install(TARGETS monad-execbench RUNTIME DESTINATION bin)
+install(TARGETS monad-execbench RUNTIME DESTINATION bin COMPONENT execbench)

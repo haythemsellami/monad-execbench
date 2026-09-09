@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/haythemsellami/monad-execbench/capture/schema/calls-v1.json",
+  "$id": "https://github.com/haythemsellami/monad-execbench/capture/monad_execbench_capture/schema/calls-v1.json",
   "title": "monad-execbench call manifest v1",
   "type": "object",
   "additionalProperties": false,

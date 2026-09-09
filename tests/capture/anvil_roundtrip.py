@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -160,14 +161,14 @@ def assert_nested_log_order(rpc: RpcClient, calls: dict[str, object]) -> None:
             raise RuntimeError("failed to restore Anvil snapshot")
 
 
-def run_benchmark(verifier: Path, fixture: Path, output: Path) -> None:
+def run_benchmark(verifier: Path, fixture: Path, output: Path, mode: str) -> None:
     result = subprocess.run(
         [
             verifier,
             "run",
             fixture,
             "--mode",
-            "dual-hot",
+            mode,
             "--repetitions",
             "2",
             "--output",
@@ -214,7 +215,14 @@ def main() -> int:
     parser.add_argument("--anvil", default="anvil")
     parser.add_argument("--forge", default="forge")
     parser.add_argument("--verifier", required=True, type=Path)
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="preserve successful roundtrip artifacts in a new directory",
+    )
     arguments = parser.parse_args()
+    if arguments.output and arguments.output.exists():
+        parser.error("--output already exists; choose a new directory")
 
     port = available_port()
     endpoint = f"http://127.0.0.1:{port}"
@@ -265,11 +273,29 @@ def main() -> int:
                     return result.returncode
                 if "cases=7\nverification=passed\n" not in result.stdout:
                     raise RuntimeError("verifier did not report the expected summary")
-                run_benchmark(
-                    arguments.verifier,
-                    fixture,
-                    Path(directory) / "benchmark.json",
+                for mode in ("dual-hot", "interpreter-hot"):
+                    run_benchmark(
+                        arguments.verifier,
+                        fixture,
+                        Path(directory) / f"{mode}.json",
+                        mode,
+                    )
+                subprocess.run(
+                    [
+                        sys.executable,
+                        "-m",
+                        "monad_execbench_report",
+                        "--input",
+                        f"dual={directory}/dual-hot.json",
+                        "--input",
+                        f"interpreter={directory}/interpreter-hot.json",
+                        "--output",
+                        f"{directory}/report.md",
+                    ],
+                    check=True,
                 )
+                if arguments.output:
+                    shutil.copytree(directory, arguments.output)
             return 0
         except BaseException:
             failed = True

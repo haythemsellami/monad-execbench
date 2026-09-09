@@ -1,0 +1,118 @@
+name: Correctness
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: correctness-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python ${{ matrix.python }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14]
+        python: ['3.11', '3.14']
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install development dependencies
+        run: python -m pip install -e '.[dev]'
+      - name: Python checks
+        run: bash ci/check-python.sh
+      - name: Test source and wheel installations
+        run: python tests/packaging/check_distributions.py
+      - name: Retain Python distribution candidates
+        if: matrix.os == 'ubuntu-24.04' && matrix.python == '3.11'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: python-distributions
+          path: dist/
+          if-no-files-found: error
+
+  foundry:
+    name: Foundry helper
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1
+        with:
+          version: v1.8.1
+          cache: false
+      - run: forge fmt --check
+        working-directory: foundry
+      - run: forge test -vv
+        working-directory: foundry
+
+  linux:
+    name: Linux C++ and end-to-end replay
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1
+        with:
+          version: v1.8.1
+          cache: false
+      - name: Check Docker build-context allowlist
+        run: python3 tests/packaging/check_docker_context.py
+      - name: Build pinned Linux environment
+        run: |
+          bash ci/stage-foundry.sh
+          docker build --tag execbench-ci --file ci/Dockerfile \
+            --build-arg EXECBENCH_UID="$(id -u)" \
+            --build-arg EXECBENCH_GID="$(id -g)" .
+      - name: Build, install, and test
+        run: |
+          docker run --rm \
+            --mount "type=bind,src=$PWD,dst=/work" \
+            --mount "type=bind,src=$PWD/results/ci/foundry-bin,dst=/opt/foundry,readonly" \
+            --env EXECBENCH_BUILD_JOBS=2 \
+            execbench-ci bash ci/check-linux.sh
+      - name: Retain correctness diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linux-correctness-diagnostics
+          path: |
+            results/ci/roundtrip/
+            results/ci/*.txt
+            build/Testing/Temporary/
+          if-no-files-found: warn
+
+  required:
+    name: Release readiness
+    if: always()
+    needs: [python, foundry, linux]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      PYTHON_RESULT: ${{ needs.python.result }}
+      FOUNDRY_RESULT: ${{ needs.foundry.result }}
+      LINUX_RESULT: ${{ needs.linux.result }}
+    steps:
+      - name: Require all correctness jobs
+        run: |
+          test "$PYTHON_RESULT" = success
+          test "$FOUNDRY_RESULT" = success
+          test "$LINUX_RESULT" = success

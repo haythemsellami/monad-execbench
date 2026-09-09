@@ -1,0 +1,6 @@
+include release.json
+recursive-include docs *.md
+include foundry/src/ExecBench.sol
+prune third_party
+prune build
+prune results
