@@ -1,4 +1,7 @@
 #include <monad-execbench/replay.hpp>
+#ifdef MONAD_EXECBENCH_DIAGNOSTICS
+#include <monad-execbench/diagnostics.hpp>
+#endif
 
 #include <category/core/hex.hpp>
 #include <category/execution/ethereum/block_hash_buffer.hpp>
@@ -838,6 +841,37 @@ namespace monad_execbench
             std::make_unique<ExecutionIteration>(
                 impl_->suite, replay_case, impl_->session, false))};
     }
+
+#ifdef MONAD_EXECBENCH_DIAGNOSTICS
+    nlohmann::json diagnose_fixture_suite(FixtureSuite const &suite)
+    {
+        require_supported_suite(suite);
+        ExecutionSession session{suite, BenchmarkMode::interpreter_hot};
+        auto cases = nlohmann::json::array();
+        for (auto const &replay_case : suite.cases) {
+            diagnostic_begin();
+            auto const result = execute_case(suite, replay_case, session, true);
+            if (!result.failures.empty()) {
+                fail_case(replay_case, "diagnostic-interpreter", result.failures);
+            }
+            auto diagnostic = diagnostic_finish(result.gas_used);
+            diagnostic["name"] = replay_case.name;
+            diagnostic["status"] = status_name(result.status);
+            cases.push_back(std::move(diagnostic));
+        }
+        return {
+            {"schema", "monad-execbench/diagnostics-v1"},
+            {"execution_env", suite.execution_env},
+            {"mode", "diagnostic-interpreter"},
+            {"monad_commit", MONAD_EXECBENCH_MONAD_COMMIT},
+            {"runner_commit", MONAD_EXECBENCH_COMMIT},
+            {"version", MONAD_EXECBENCH_VERSION},
+            {"bundle_sha256", suite.provenance.bundle_sha256},
+            {"block_number", suite.block.number},
+            {"block_hash", hex(suite.block.hash)},
+            {"cases", cases}};
+    }
+#endif
 
     VerificationSummary verify_fixture_suite(
         FixtureSuite const &suite,

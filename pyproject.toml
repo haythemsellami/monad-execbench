@@ -9,7 +9,7 @@ description = "Capture portable fixtures and report monad-execbench results"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "GPL-3.0-only"
-dependencies = ["zstandard>=0.23,<1"]
+dependencies = ["zstandard>=0.23,<1", "pycryptodome>=3.20,<4"]
 
 [project.optional-dependencies]
 dev = ["ruff==0.16.6", "build==1.4.0", "twine>=6,<7"]
@@ -17,13 +17,15 @@ dev = ["ruff==0.16.6", "build==1.4.0", "twine>=6,<7"]
 [project.scripts]
 monad-execbench-capture = "monad_execbench_capture.cli:main"
 monad-execbench-report = "monad_execbench_report.cli:main"
+monad-execbench-attribute = "monad_execbench_attribution.cli:main"
 
 [tool.setuptools]
-packages = ["monad_execbench_capture", "monad_execbench_report"]
+packages = ["monad_execbench_capture", "monad_execbench_report", "monad_execbench_attribution"]
 
 [tool.setuptools.package-dir]
 monad_execbench_capture = "capture/monad_execbench_capture"
 monad_execbench_report = "analysis/monad_execbench_report"
+monad_execbench_attribution = "analysis/monad_execbench_attribution"
 
 [tool.setuptools.package-data]
 monad_execbench_capture = ["pinned-monad.txt", "schema/*.json"]

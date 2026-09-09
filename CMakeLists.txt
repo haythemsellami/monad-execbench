@@ -61,19 +61,56 @@ set(MONAD_COMPILER_BENCHMARKS OFF CACHE BOOL "" FORCE)
 set(MONAD_COMPILER_DUMP_ASM OFF CACHE BOOL "" FORCE)
 set(MONAD_COMPILER_STATS OFF CACHE BOOL "" FORCE)
 set(MONAD_COMPILER_HOT_PATH_STATS OFF CACHE BOOL "" FORCE)
+set(MONAD_VM_INTERPRETER_DEBUG OFF CACHE BOOL "" FORCE)
+set(MONAD_VM_INTERPRETER_STATS OFF CACHE BOOL "" FORCE)
+
+option(MONAD_EXECBENCH_DIAGNOSTICS
+       "Build the diagnostic runner instead of the timing runner" OFF)
+if(DEFINED MONAD_EXECBENCH_BUILD_VARIANT AND
+   NOT "${MONAD_EXECBENCH_BUILD_VARIANT}" STREQUAL "${MONAD_EXECBENCH_DIAGNOSTICS}")
+  message(FATAL_ERROR "Timing and diagnostic builds require separate build directories")
+endif()
+set(MONAD_EXECBENCH_BUILD_VARIANT "${MONAD_EXECBENCH_DIAGNOSTICS}"
+    CACHE INTERNAL "Build isolation")
 
 add_subdirectory(
   "${MONAD_SOURCE_DIR}"
   "${CMAKE_CURRENT_BINARY_DIR}/third_party/monad"
   EXCLUDE_FROM_ALL)
 
-add_executable(
-  monad-execbench
-  src/benchmark.cpp
-  src/fixture.cpp
-  src/hash.cpp
-  src/main.cpp
-  src/replay.cpp)
+if(MONAD_EXECBENCH_DIAGNOSTICS)
+  string(TOUPPER "${CMAKE_BUILD_TYPE}" diagnostic_configuration)
+  if(CMAKE_INTERPROCEDURAL_OPTIMIZATION OR
+     CMAKE_INTERPROCEDURAL_OPTIMIZATION_${diagnostic_configuration})
+    message(FATAL_ERROR "Diagnostic result-symbol wrapping does not support LTO")
+  endif()
+  if(NOT MONAD_EXECBENCH_MONAD_COMMIT STREQUAL "aae93c5352510f09640733e58159201d3cbad063")
+    message(FATAL_ERROR "The diagnostic dispatch shim requires review for this Monad revision")
+  endif()
+  # Replace only the dispatch translation unit in this isolated build. All
+  # instruction semantics, the VM, and the execution host remain upstream code.
+  get_target_property(interpreter_sources monad-vm-interpreter SOURCES)
+  list(FILTER interpreter_sources EXCLUDE REGEX "(^|/)execute\\.cpp$")
+  set_property(TARGET monad-vm-interpreter
+               PROPERTY SOURCES "${interpreter_sources}")
+  target_sources(monad-vm-interpreter PRIVATE
+                 "${CMAKE_CURRENT_SOURCE_DIR}/src/profiled_interpreter.cpp")
+  target_include_directories(monad-vm-interpreter PRIVATE
+                             "${CMAKE_CURRENT_SOURCE_DIR}/include")
+  add_executable(monad-execbench
+                 src/diagnostic_main.cpp src/diagnostic_result.cpp
+                 src/diagnostics.cpp src/fixture.cpp src/hash.cpp src/replay.cpp)
+  set_target_properties(monad-execbench
+                        PROPERTIES OUTPUT_NAME monad-execbench-diagnostics)
+  target_compile_definitions(monad-execbench PRIVATE MONAD_EXECBENCH_DIAGNOSTICS)
+  set(result_symbol "_ZN5monad2vm7runtime7Context19copy_to_evmc_resultINS_11MonadTraitsIL14monad_revision10EEEEEN4evmc6ResultEv")
+  target_compile_definitions(monad-execbench PRIVATE
+                             MONAD_EXECBENCH_RESULT_SYMBOL="${result_symbol}")
+  target_link_options(monad-execbench PRIVATE "LINKER:--wrap=${result_symbol}")
+else()
+  add_executable(monad-execbench
+                 src/benchmark.cpp src/fixture.cpp src/hash.cpp src/main.cpp src/replay.cpp)
+endif()
 
 target_compile_features(monad-execbench PRIVATE cxx_std_23)
 target_include_directories(monad-execbench PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
@@ -97,7 +134,7 @@ target_link_libraries(
 
 include(CTest)
 
-if(BUILD_TESTING)
+if(BUILD_TESTING AND NOT MONAD_EXECBENCH_DIAGNOSTICS)
   add_test(
     NAME monad-execbench-smoke
     COMMAND monad-execbench smoke --execution-env MONAD_TEN)
