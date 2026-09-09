@@ -150,7 +150,7 @@ def check(runner: Path) -> None:
         else:
             raise AssertionError("non-reconciling diagnostics accepted")
     print(
-        "native attribution: nested calls/reverts, return memory, errors, delegatecall, precompile, implicit STOP, empty code, and incomplete state passed"
+        "native attribution: nested calls/reverts, return memory, errors, delegatecall, precompile, creation, implicit STOP, empty code, and incomplete state passed"
     )
 
 
