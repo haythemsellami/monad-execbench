@@ -75,6 +75,10 @@ def main(argv: list[str] | None = None) -> int:
             require(name not in paths, f"duplicate input name: {name}")
             path = Path(filename).resolve()
             require(
+                path.is_file(),
+                f"input {name}: expected an existing regular file: {path}",
+            )
+            require(
                 not any(path.samefile(other) for other in paths.values()),
                 "duplicate input file",
             )

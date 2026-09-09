@@ -493,6 +493,46 @@ class ReportTest(unittest.TestCase):
             with self.subTest(extra=extra):
                 self.assertEqual(self.cli(*extra)[0], 1)
 
+    def test_input_paths_are_validated_before_duplicate_checks(self):
+        for invalid in (self.root / "missing.json", self.root):
+            for position in ("first", "second"):
+                with self.subTest(path=invalid, position=position):
+                    inputs = ["--input", f"invalid={invalid}"]
+                    if position == "second":
+                        inputs = ["--input", f"dual={self.path}", *inputs]
+                    stdout, stderr = io.StringIO(), io.StringIO()
+                    with (
+                        patch("monad_execbench_report.cli.Path.samefile") as samefile,
+                        redirect_stdout(stdout),
+                        redirect_stderr(stderr),
+                    ):
+                        status = main([*inputs, "--output", str(self.output)])
+                    self.assertEqual(status, 1)
+                    self.assertEqual(
+                        stderr.getvalue(),
+                        f"report failed: input invalid: expected an existing regular file: {invalid.resolve()}\n",
+                    )
+                    self.assertEqual(stdout.getvalue(), "")
+                    samefile.assert_not_called()
+                    self.assertFalse(self.output.exists())
+
+    def test_os_errors_after_input_validation_preserve_report(self):
+        self.output.write_text("previous report")
+        for error in (
+            FileNotFoundError("input disappeared"),
+            PermissionError("access denied"),
+        ):
+            with self.subTest(error=type(error).__name__):
+                with patch(
+                    "monad_execbench_report.cli.Path.samefile", side_effect=error
+                ):
+                    status, output = self.cli(
+                        "--input", f"other={self.pairs}", "--force"
+                    )
+                self.assertEqual(status, 1)
+                self.assertEqual(output, f"report failed: {error}\n")
+                self.assertEqual(self.output.read_text(), "previous report")
+
     def test_nonfinite_numeric_exponents_are_rejected(self):
         with self.assertRaisesRegex(ReportError, "non-finite JSON number"):
             parse_json('{"context": {"mhz_per_cpu": 1e400}}')
