@@ -1,9 +1,4 @@
 **
-!ci/
 !ci/Dockerfile
-!third_party/
-!third_party/monad/
-!third_party/monad/scripts/
-!third_party/monad/scripts/ubuntu-build/
 !third_party/monad/scripts/ubuntu-build/install-boost.sh
 !third_party/monad/scripts/ubuntu-build/install-deps.sh

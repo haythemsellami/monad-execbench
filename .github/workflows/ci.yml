@@ -74,6 +74,8 @@ jobs:
         with:
           version: v1.8.1
           cache: false
+      - name: Check Docker build-context allowlist
+        run: python3 tests/packaging/check_docker_context.py
       - name: Build pinned Linux environment
         run: |
           bash ci/stage-foundry.sh
