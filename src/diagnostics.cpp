@@ -101,11 +101,12 @@ namespace monad_execbench
                                     ? std::optional<std::size_t>{}
                                     : collector.stack.back();
             bool creation = false;
-                if (parent) {
-                    auto const &caller = collector.frames.at(*parent);
-                    if (!caller.pending_pc) {
-                        throw std::runtime_error{"child frame without calling opcode"};
-                    }
+            if (parent) {
+                auto const &caller = collector.frames.at(*parent);
+                if (!caller.pending_pc) {
+                    throw std::runtime_error{
+                        "child frame without calling opcode"};
+                }
                 auto const opcode = caller.pcs.at(*caller.pending_pc).opcode;
                 creation = opcode == 0xf0 || opcode == 0xf5;
             }
