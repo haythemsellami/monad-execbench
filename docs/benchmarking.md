@@ -124,3 +124,12 @@ For publishable results, pin the process to a physical CPU, keep competing load
 off that core, use a stable CPU-frequency policy, retain the raw JSON, and treat
 Google Benchmark environment warnings as reasons to rerun rather than as
 reportable measurements.
+
+## Reporting saved results
+
+The separate Python `monad-execbench-report` command generates Markdown from
+these JSON files without a C++ build or a benchmark rerun. It recomputes
+distributions from raw repetitions, preserves provenance and exact metadata,
+and supports explicit compatible-case comparisons. It retains quality warnings
+so exploratory reports are not mistaken for publication-ready measurements.
+See the [reporting guide](reporting.md).
