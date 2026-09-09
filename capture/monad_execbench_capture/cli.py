@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import sys
+from importlib.resources import files
 from pathlib import Path
 
 from . import __version__
@@ -34,10 +36,22 @@ def parser() -> argparse.ArgumentParser:
 
 
 def detect_monad_commit() -> str:
+    pinned = (
+        files("monad_execbench_capture")
+        .joinpath("pinned-monad.txt")
+        .read_text()
+        .strip()
+    )
+    if re.fullmatch(r"[0-9a-f]{40}", pinned) is None:
+        raise CaptureError("installed Monad dependency pin is invalid")
     repository = Path(__file__).resolve().parents[2]
     monad = repository / "third_party" / "monad"
+    # A wheel has no source checkout. An uninitialized submodule directory can
+    # also make git search upward and incorrectly return the parent repo's SHA.
+    if not (monad / ".git").exists():
+        return pinned
     try:
-        return subprocess.run(
+        checked_out = subprocess.run(
             ["git", "-C", str(monad), "rev-parse", "HEAD"],
             check=True,
             capture_output=True,
@@ -47,11 +61,20 @@ def detect_monad_commit() -> str:
         raise CaptureError(
             "cannot determine the pinned Monad commit; pass --monad-commit"
         ) from error
+    if checked_out != pinned:
+        raise CaptureError(
+            "Monad checkout differs from the packaged dependency pin; "
+            "restore the pinned submodule or pass --monad-commit explicitly"
+        )
+    return pinned
 
 
 def main(argv: list[str] | None = None) -> int:
     arguments = parser().parse_args(argv)
     try:
+        monad_commit = arguments.monad_commit or detect_monad_commit()
+        if re.fullmatch(r"[0-9a-f]{40}", monad_commit) is None:
+            raise CaptureError("--monad-commit must be a full lowercase Git revision")
         calls_bytes = arguments.calls.read_bytes()
         calls_document = load_calls_document(calls_bytes)
         rpc = RpcClient(arguments.rpc_url, arguments.timeout)
@@ -65,7 +88,7 @@ def main(argv: list[str] | None = None) -> int:
             arguments.output,
             bundle,
             calls_bytes=calls_bytes,
-            monad_commit=arguments.monad_commit or detect_monad_commit(),
+            monad_commit=monad_commit,
             capture_version=__version__,
             force=arguments.force,
         )

@@ -12,7 +12,7 @@ license = "GPL-3.0-only"
 dependencies = ["zstandard>=0.23,<1"]
 
 [project.optional-dependencies]
-dev = ["ruff>=0.16,<1"]
+dev = ["ruff==0.16.6", "build==1.4.0", "twine>=6,<7"]
 
 [project.scripts]
 monad-execbench-capture = "monad_execbench_capture.cli:main"
@@ -24,3 +24,6 @@ packages = ["monad_execbench_capture", "monad_execbench_report"]
 [tool.setuptools.package-dir]
 monad_execbench_capture = "capture/monad_execbench_capture"
 monad_execbench_report = "analysis/monad_execbench_report"
+
+[tool.setuptools.package-data]
+monad_execbench_capture = ["pinned-monad.txt", "schema/*.json"]
