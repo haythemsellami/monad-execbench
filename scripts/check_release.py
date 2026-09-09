@@ -34,6 +34,11 @@ def check_release(
     project = tomllib.loads((root / "pyproject.toml").read_text())["project"]
     if project["version"] != version:
         raise ValueError("Python distribution version disagrees with release.json")
+    if project["requires-python"] != ">=" + release["python_versions_tested"][0]:
+        raise ValueError("Python minimum disagrees with release.json")
+    capture_source = (root / "capture/monad_execbench_capture/capture.py").read_text()
+    if f'DEFAULT_EXECUTION_ENV = "{release["execution_env"]}"' not in capture_source:
+        raise ValueError("capture execution environment disagrees with release.json")
     cmake = (root / "CMakeLists.txt").read_text()
     if f"project(monad_execbench VERSION {version} LANGUAGES C CXX ASM)" not in cmake:
         raise ValueError("CMake version disagrees with release.json")
@@ -66,6 +71,12 @@ def check_release(
         if len(fields) != 4 or fields[:3] != ["160000", "commit", expected]:
             raise ValueError(f"{dependency} gitlink disagrees with release.json")
     workflow = (root / ".github/workflows/ci.yml").read_text()
+    python_matrix = re.search(r"python: (\[[^\n]+\])", workflow)
+    if (
+        not python_matrix
+        or ast.literal_eval(python_matrix[1]) != release["python_versions_tested"]
+    ):
+        raise ValueError("CI Python matrix disagrees with release.json")
     foundry_versions = re.findall(r"version: (v[0-9.]+)", workflow)
     if not foundry_versions or any(
         value != release["foundry_version"] for value in foundry_versions

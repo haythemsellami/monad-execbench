@@ -43,7 +43,7 @@ The input is a JSON document using `monad-execbench/calls-v1`:
 ```
 
 The machine-readable schema is
-[`capture/schema/calls-v1.json`](../capture/schema/calls-v1.json). Unknown
+[`capture/monad_execbench_capture/schema/calls-v1.json`](../capture/monad_execbench_capture/schema/calls-v1.json). Unknown
 fields are rejected so misspelled call parameters cannot silently change a
 capture.
 
@@ -61,6 +61,13 @@ See the [Foundry workflow](foundry.md) for generating manifests from normal
 Solidity deployment scripts.
 
 ## Capturing a fixture
+
+The Python wheel includes the expected Monad revision and call schema. Its
+default revision does not depend on having Git or a source checkout installed.
+An initialized source submodule must match the packaged pin; an intentionally
+different client revision requires an explicit full lowercase `--monad-commit`.
+Revision validation happens before RPC capture, and the C++ verifier still
+enforces replay correctness. See the [release policy](releases.md).
 
 Use a Monad-compatible local fork and pin it to a stable block:
 

@@ -76,6 +76,7 @@ jobs:
           cache: false
       - name: Build pinned Linux environment
         run: |
+          bash ci/stage-foundry.sh
           docker build --tag execbench-ci --file ci/Dockerfile \
             --build-arg EXECBENCH_UID="$(id -u)" \
             --build-arg EXECBENCH_GID="$(id -g)" .
@@ -83,7 +84,7 @@ jobs:
         run: |
           docker run --rm \
             --mount "type=bind,src=$PWD,dst=/work" \
-            --mount "type=bind,src=$HOME/.foundry/bin,dst=/opt/foundry,readonly" \
+            --mount "type=bind,src=$PWD/results/ci/foundry-bin,dst=/opt/foundry,readonly" \
             --env EXECBENCH_BUILD_JOBS=2 \
             execbench-ci bash ci/check-linux.sh
       - name: Retain correctness diagnostics

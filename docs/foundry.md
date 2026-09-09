@@ -123,7 +123,7 @@ On the supported Linux build host, with Monad-enabled `forge` and `anvil` on
 `PATH`, run:
 
 ```bash
-PYTHONPATH=capture python3 tests/capture/anvil_roundtrip.py \
+.venv/bin/python tests/capture/anvil_roundtrip.py \
   --verifier ./build/monad-execbench
 ```
 
@@ -132,4 +132,7 @@ v1.8.0 or newer, launches Anvil with `MonadTen`, deploys fresh probe contracts,
 and covers ABI-generated calldata, a nested reverted read, direct storage reads
 and writes, a root revert, nested log ordering checked against a transaction
 receipt, access-list warming, metadata, capture, two-mode verification, and a
-short `dual-hot` run.
+short runs in both hot modes followed by Markdown report generation. Install
+the Python utilities first (`python -m pip install -e .`). Optional
+`--output results/roundtrip` preserves successful fixture, JSON, and Markdown
+artifacts in a new directory. These short runs validate behavior, not speed.

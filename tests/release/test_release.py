@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -29,6 +31,7 @@ class ReleaseTest(unittest.TestCase):
             "CMakeLists.txt",
             ".github/workflows/ci.yml",
             "capture/monad_execbench_capture/__init__.py",
+            "capture/monad_execbench_capture/capture.py",
             "capture/monad_execbench_capture/pinned-monad.txt",
             "analysis/monad_execbench_report/__init__.py",
         ):
@@ -50,7 +53,8 @@ class ReleaseTest(unittest.TestCase):
             return checker.check_release(self.root, **kwargs)
 
     def test_matching_versions_and_release_tag(self):
-        self.assertEqual(self.check(tag="v0.1.0")["version"], "0.1.0")
+        version = self.release["version"]
+        self.assertEqual(self.check(tag=f"v{version}")["version"], version)
         with self.assertRaisesRegex(ValueError, "release tag"):
             self.check(tag="v9.0.0")
 
@@ -64,7 +68,7 @@ class ReleaseTest(unittest.TestCase):
             with self.subTest(name=name):
                 path = self.root / name
                 original = path.read_text()
-                path.write_text(original.replace("0.1.0", "9.0.0"))
+                path.write_text(original.replace(self.release["version"], "9.0.0"))
                 with self.assertRaisesRegex(ValueError, "version disagrees"):
                     self.check()
                 path.write_text(original)
@@ -88,7 +92,9 @@ class ReleaseTest(unittest.TestCase):
 
     def test_foundry_version_drift_is_rejected(self):
         path = self.root / ".github/workflows/ci.yml"
-        path.write_text(path.read_text().replace("v1.8.1", "v1.8.0"))
+        path.write_text(
+            path.read_text().replace(self.release["foundry_version"], "v0.0.0")
+        )
         with self.assertRaisesRegex(ValueError, "Foundry versions"):
             self.check()
 
@@ -115,6 +121,49 @@ class ReleaseTest(unittest.TestCase):
             )
             with self.assertRaisesRegex(ValueError, "dirty dependency"):
                 self.check(check_submodules=True)
+
+    def test_dirty_release_checkout_is_rejected(self):
+        original_git = self.git
+        self.git = lambda root, *args: (
+            " M README.md"
+            if args == ("status", "--porcelain")
+            else original_git(root, *args)
+        )
+        with self.assertRaisesRegex(ValueError, "clean checkout"):
+            self.check(check_clean=True)
+
+    def test_environment_and_python_matrix_drift_are_rejected(self):
+        path = self.root / "release.json"
+        for key, value in (
+            ("execution_env", "MONAD_NINE"),
+            ("python_versions_tested", ["3.11", "3.13"]),
+        ):
+            with self.subTest(key=key):
+                path.write_text(json.dumps({**self.release, key: value}))
+                with self.assertRaisesRegex(ValueError, "disagrees"):
+                    self.check()
+
+    def test_release_manifest_checksums_every_asset(self):
+        spec = importlib.util.spec_from_file_location(
+            "prepare_release", ROOT / "scripts/prepare_release.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        with patch.dict(sys.modules, {"check_release": checker}):
+            spec.loader.exec_module(module)
+        assets = self.root / "assets"
+        assets.mkdir()
+        (assets / "package.whl").write_bytes(b"wheel")
+        (assets / "package.tar.gz").write_bytes(b"source")
+        module.write_manifest(assets, self.release, "a" * 40, " pinned dependency")
+        lines = (assets / "SHA256SUMS").read_text().splitlines()
+        self.assertEqual(len(lines), 3)
+        for line in lines:
+            digest, name = line.split("  ")
+            self.assertEqual(
+                digest, hashlib.sha256((assets / name).read_bytes()).hexdigest()
+            )
+        manifest = json.loads((assets / "release-manifest.json").read_text())
+        self.assertEqual(manifest["source_commit"], "a" * 40)
 
 
 if __name__ == "__main__":

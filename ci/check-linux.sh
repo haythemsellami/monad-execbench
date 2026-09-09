@@ -23,6 +23,9 @@ python scripts/check_release.py --check-submodules
 bash ci/check-python.sh
 forge --version
 anvil --version
+expected_foundry="$(python -c 'import json; print(json.load(open("release.json"))["foundry_version"].removeprefix("v"))')"
+forge --version | grep -Fx "forge Version: $expected_foundry"
+anvil --version | grep -Fx "anvil Version: $expected_foundry"
 forge fmt --check --root foundry
 forge test --root foundry -vv
 
