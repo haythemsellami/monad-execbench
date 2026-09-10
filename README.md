@@ -119,6 +119,24 @@ incompatible modes, fixtures, builds, or hosts cannot be silently compared.
 See the [reporting guide](docs/reporting.md) for pairing, statistical conventions,
 validation rules, and limitations.
 
+## Local dashboard
+
+The read-only, protocol-agnostic results viewer explores saved timing JSON and
+optional diagnostic/source-attribution output. No benchmark rerun, RPC access,
+C++ build or frontend toolchain is needed to view results.
+
+```bash
+monad-execbench-viewer export \
+  --input dual=results/dual-hot.json \
+  --profile results/attribution.json \
+  --output results/viewer
+monad-execbench-viewer serve results/viewer
+```
+
+It retains quality warnings and comparison safeguards, and loads diagnostic
+details per case/frame instead of sending the entire trace to the browser.
+See [the viewer guide](docs/viewer.md) for comparisons, inputs and limitations.
+
 ## Capture utility
 
 The Python capture utility converts generic EVM call descriptions into
