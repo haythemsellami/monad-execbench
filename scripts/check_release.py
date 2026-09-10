@@ -46,6 +46,7 @@ def check_release(
         "capture/monad_execbench_capture",
         "analysis/monad_execbench_report",
         "analysis/monad_execbench_attribution",
+        "analysis/monad_execbench_viewer",
     ):
         tree = ast.parse((root / package / "__init__.py").read_text())
         versions = [

@@ -18,14 +18,17 @@ dev = ["ruff==0.16.6", "build==1.4.0", "twine>=6,<7"]
 monad-execbench-capture = "monad_execbench_capture.cli:main"
 monad-execbench-report = "monad_execbench_report.cli:main"
 monad-execbench-attribute = "monad_execbench_attribution.cli:main"
+monad-execbench-viewer = "monad_execbench_viewer.cli:main"
 
 [tool.setuptools]
-packages = ["monad_execbench_capture", "monad_execbench_report", "monad_execbench_attribution"]
+packages = ["monad_execbench_capture", "monad_execbench_report", "monad_execbench_attribution", "monad_execbench_viewer"]
 
 [tool.setuptools.package-dir]
 monad_execbench_capture = "capture/monad_execbench_capture"
 monad_execbench_report = "analysis/monad_execbench_report"
 monad_execbench_attribution = "analysis/monad_execbench_attribution"
+monad_execbench_viewer = "analysis/monad_execbench_viewer"
 
 [tool.setuptools.package-data]
 monad_execbench_capture = ["pinned-monad.txt", "schema/*.json"]
+monad_execbench_viewer = ["static/*.html", "static/*.css", "static/*.js"]
