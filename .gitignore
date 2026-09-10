@@ -1,4 +1,5 @@
 /build/
+/build-diagnostics/
 /cmake-build-*/
 /.cache/
 

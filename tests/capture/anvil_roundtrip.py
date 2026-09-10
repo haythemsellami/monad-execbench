@@ -215,6 +215,7 @@ def main() -> int:
     parser.add_argument("--anvil", default="anvil")
     parser.add_argument("--forge", default="forge")
     parser.add_argument("--verifier", required=True, type=Path)
+    parser.add_argument("--diagnostics", type=Path)
     parser.add_argument(
         "--output",
         type=Path,
@@ -242,6 +243,20 @@ def main() -> int:
         try:
             rpc = RpcClient(endpoint)
             wait_for_rpc(rpc, process)
+            if arguments.diagnostics:
+                subprocess.run(
+                    [
+                        arguments.forge,
+                        "build",
+                        "--build-info",
+                        "--force",
+                        "--quiet",
+                        "--extra-output",
+                        "evm.deployedBytecode.generatedSources",
+                    ],
+                    cwd=FOUNDRY_ROOT,
+                    check=True,
+                )
             FOUNDRY_ROOT.joinpath("out").mkdir(exist_ok=True)
             with tempfile.TemporaryDirectory(
                 prefix=".execbench-integration-", dir=FOUNDRY_ROOT / "out"
@@ -294,6 +309,54 @@ def main() -> int:
                     ],
                     check=True,
                 )
+                if arguments.diagnostics:
+                    result = subprocess.run(
+                        [arguments.diagnostics, fixture],
+                        capture_output=True,
+                        check=True,
+                    )
+                    diagnostic_path = Path(directory) / "diagnostics.json"
+                    diagnostic_path.write_bytes(result.stdout)
+                    attribution_path = Path(directory) / "attribution.json"
+                    subprocess.run(
+                        [
+                            sys.executable,
+                            "-m",
+                            "monad_execbench_attribution",
+                            "--diagnostics",
+                            diagnostic_path,
+                            "--build-info",
+                            FOUNDRY_ROOT / "out/build-info",
+                            "--output",
+                            Path(directory) / "attribution.md",
+                            "--json-output",
+                            attribution_path,
+                        ],
+                        check=True,
+                    )
+                    attributed = json.loads(attribution_path.read_bytes())
+                    if len(attributed["cases"]) != 7:
+                        raise RuntimeError("attribution omitted cases")
+                    for case in attributed["cases"]:
+                        if case["coverage"]["solidity"]["gas"] <= 0:
+                            raise RuntimeError("attribution did not find Solidity work")
+                        for frame in case["frames"]:
+                            if frame["artifact_match"]["status"] not in (
+                                "exact",
+                                "masked",
+                            ):
+                                raise RuntimeError(
+                                    "attribution failed to match probe runtime code"
+                                )
+                    reverted = next(
+                        case
+                        for case in attributed["cases"]
+                        if case["name"] == "probe/nested-revert-read"
+                    )
+                    if not any(
+                        frame["status"] == "revert" for frame in reverted["frames"]
+                    ):
+                        raise RuntimeError("attribution omitted reverted work")
                 if arguments.output:
                     shutil.copytree(directory, arguments.output)
             return 0

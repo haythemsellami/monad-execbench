@@ -38,7 +38,15 @@ cmake --install build --prefix "$PWD/results/ci/install" --component execbench
 runner="$PWD/results/ci/install/bin/monad-execbench"
 "$runner" --version
 "$runner" smoke --execution-env MONAD_TEN
-python tests/capture/anvil_roundtrip.py --verifier "$runner" --output results/ci/roundtrip
+CC=gcc-15 CXX=g++-15 cmake -S . -B build-diagnostics -G Ninja \
+  -DMONAD_EXECBENCH_DIAGNOSTICS=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DCMAKE_TOOLCHAIN_FILE="$PWD/third_party/monad/category/core/toolchains/gcc-avx2.cmake"
+cmake --build build-diagnostics --target monad-execbench --parallel "${EXECBENCH_BUILD_JOBS:-2}"
+cmake --install build-diagnostics --prefix "$PWD/results/ci/install" --component execbench
+diagnostics="$PWD/results/ci/install/bin/monad-execbench-diagnostics"
+"$diagnostics" --version
+python tests/attribution/native_checks.py --diagnostics "$diagnostics"
+python tests/capture/anvil_roundtrip.py --verifier "$runner" --diagnostics "$diagnostics" --output results/ci/roundtrip
 
 python -m pip freeze > results/ci/python-packages.txt
 dpkg-query -W > results/ci/system-packages.txt

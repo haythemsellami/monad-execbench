@@ -4,13 +4,14 @@
 
 Implementation and roadmap specification for the `0.1.0` release candidate.
 Implemented: Foundry call preparation, portable capture, offline verification,
-both hot benchmark modes, and Markdown reporting. Correctness CI and release
+both hot benchmark modes, Markdown reporting, and isolated interpreter
+gas/opcode/Solidity attribution. Correctness CI and release
 preparation are described in the [release policy](releases.md).
 
-Hardware profiling, opcode/call-frame/source attribution, cold execution, and
+Hardware profiling, complete call-tracer trees, cold execution, and
 transaction/block paths are future work. Goals and sections marked planned
 below describe that roadmap, not features available in the current CLI.
-The fixture, capture, benchmarking, and reporting guides define the current
+The fixture, capture, benchmarking, reporting, and [attribution](attribution.md) guides define the current
 interfaces. Release preparation does not itself publish a release.
 
 ## 1. Purpose
@@ -20,8 +21,9 @@ interfaces. Release preparation does not itself publish a release.
 The tool consumes a portable execution bundle containing a block environment,
 transaction message, account state, and expected result. It executes that bundle
 directly through the Monad VM and reports wall/process-CPU time, execution gas,
-metadata, and provenance. Hardware counters, opcode attribution, and call-frame
-attribution are planned additions.
+metadata, and provenance. A separate diagnostic replay attributes gas and
+opcode visits to interpreter frames and compiler source maps. Hardware counters
+and CPU attribution remain planned additions.
 
 Foundry prepares contracts and calls. RPC tracing captures the state needed to replay them. The C++ runner performs the measurement. The runner must not contain hardcoded knowledge of any contract, protocol, address, ABI, function selector, or benchmark input.
 
@@ -70,7 +72,7 @@ Analysis and reporting
   |-- compares gas and CPU ratios
   |-- records distributions, metadata, and provenance
   |-- planned: processes perf counters and flamegraphs
-  `-- planned: attributes work to call frames, opcodes, and source
+  `-- attributes interpreter gas/opcode visits to VM frames and source
 ```
 
 ## 4. Project components
@@ -138,8 +140,9 @@ Consumer-specific deployment and state preparation remain in the consumer reposi
 
 The [offline reporting command](reporting.md) implements per-case distributions,
 explicit gas/timing comparisons, exact metadata, provenance, and quality
-warnings from saved JSON. Hardware-counter collection, flamegraphs, opcode and
-call-frame attribution, and source mapping remain follow-up work.
+warnings from saved JSON. The [attribution command](attribution.md) maps separate
+interpreter diagnostics to Foundry source maps. Hardware-counter collection,
+flamegraphs, and a complete call-tracer tree remain follow-up work.
 
 Analysis scripts will consume raw benchmark output and generate:
 
@@ -155,7 +158,12 @@ Raw data must remain available so generated conclusions can be independently che
 
 ## 5. Foundry integration
 
-### 5.1 Foundry artifacts (planned enrichment)
+### 5.1 Foundry artifacts
+
+The implemented attribution utility consumes complete Foundry build-info as an
+offline input, independently of capture. It uses embedded sources and deployed
+bytecode/source maps with immutable and library reference ranges. Creation-code
+mapping and automatic artifact enrichment of capture bundles remain planned.
 
 The capture utility may consume Foundry artifacts from `out/` to obtain:
 
@@ -356,7 +364,9 @@ This is the primary diagnostic mode.
 - Collect opcode counts and other interpreter diagnostics when enabled.
 - Preserve identical transaction-state reset semantics.
 
-This mode supports detailed attribution and provides a compiler-independent correctness comparison.
+This mode provides a compiler-independent correctness comparison. Detailed
+gas/opcode/source attribution uses a separate diagnostic build, not
+instrumentation inside this timing mode.
 
 ### 9.3 `dual-cold` (planned)
 
@@ -488,15 +498,21 @@ Profiling invocations, raw perf data, and generated summaries must record the sa
 
 ## 15. Opcode, call-frame, and source attribution
 
-This section is planned work; these diagnostics are not implemented in `0.1.0`.
+Implemented through the separate diagnostic interpreter build and offline
+Foundry build-info mapper. See [the attribution guide](attribution.md) for the
+CLI, gas accounting, matching rules, limits, and regression tests. These are
+gas/count diagnostics, not CPU samples.
 
-Interpreter diagnostics may record:
+Interpreter diagnostics record:
 
 ```text
 address -> code hash -> program counter -> opcode -> count/cost
 ```
 
-Call-frame attribution may record:
+The current interpreter-frame records contain parent ID, depth, storage-context
+recipient, EVMC sender, input selector, executed code hash, gas supplied/used,
+status, and inclusive/self gas. Precompiles and other host-only calls do not
+produce interpreter frames. A future complete call-tracer tree may add:
 
 - Caller and callee.
 - Call type.
@@ -578,9 +594,9 @@ The first version should not require source modifications inside the Monad submo
 
 - Add `perf stat` automation.
 - Capture flamegraphs for representative cases.
-- Add interpreter opcode aggregation.
-- Add call-frame attribution.
-- Map locally built bytecode to Solidity through Foundry source maps.
+- Implemented: isolated interpreter opcode counts and exclusive gas aggregation.
+- Implemented: interpreter-frame attribution; a complete call-tracer tree remains planned.
+- Implemented: Solidity source attribution through matching Foundry build-info.
 
 ### Phase 5: Extended measurements
 

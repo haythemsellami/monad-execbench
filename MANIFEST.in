@@ -3,4 +3,5 @@ recursive-include docs *.md
 include foundry/src/ExecBench.sol
 prune third_party
 prune build
+prune build-diagnostics
 prune results

@@ -17,6 +17,7 @@ documented, and consumers should pin a tag or commit and keep their raw data.
 | Reference node and helper tests | Foundry v1.8.1; Solidity 0.8.26 |
 | Execution environment | `MONAD_TEN`, explicitly selected for Anvil |
 | VM modes | `dual-hot`, `interpreter-hot` |
+| Attribution | Separate diagnostic interpreter build; Foundry build-info mapper |
 | Monad and Google Benchmark | Exact Git revisions in `release.json` and submodules |
 
 Upstream also supports Clang 19 with libstdc++; it is not part of this
@@ -34,14 +35,16 @@ dependencies, source revisions, and synthetic replay artifacts for diagnosis.
 
 The `Correctness` workflow runs on PRs, pushes to `main`, and manual dispatch:
 
-- **Python matrix:** lint/formatting, capture/report/release tests, version and
+- **Python matrix:** lint/formatting, capture/report/attribution/release tests, version and
   dependency-pin consistency, wheel/source-archive builds, metadata validation,
   and clean installed-package tests outside the source checkout.
 - **Foundry helper:** formatting and Solidity unit tests with a pinned toolchain.
 - **Linux C++ and end-to-end replay:** build in an unprivileged container,
   run only the project's CTest tests, install the runner component, then exercise
   local Anvil → Foundry helper → capture → two-mode verification → both hot
-  benchmark modes → Markdown reporting. No archive RPC or chain credentials
+  benchmark modes → Markdown reporting, plus a separate diagnostic build,
+  native attribution regressions, and Foundry source-map attribution reports.
+  No archive RPC or chain credentials
   are required; only synthetic local contracts are used.
 - **Release readiness:** fail unless every preceding job succeeds. Configure
   this as a required branch-protection check; the workflow itself does not
@@ -149,7 +152,8 @@ automated signing are future distribution work, not implicit CI side effects.
 ## Remaining capabilities
 
 This release supports capture, offline correctness replay, warmed direct-VM
-timing, and explicit Markdown comparisons. It does not include execution-scoped
-hardware profiling, flamegraphs, opcode/call-frame/source attribution, cold-code
+timing, explicit Markdown comparisons, and [interpreter gas/opcode/source
+attribution](attribution.md). It does not include execution-scoped hardware
+profiling, flamegraphs, a complete call-tracer tree, per-source CPU time, cold-code
 measurements, transaction/block benchmarking, or automated performance gates.
 Those remain separate feature work, as described in the [specification](spec.md).

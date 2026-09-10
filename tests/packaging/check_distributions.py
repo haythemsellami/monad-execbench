@@ -20,14 +20,15 @@ from importlib.resources import files
 from pathlib import Path
 import monad_execbench_capture as capture
 import monad_execbench_report as report
+import monad_execbench_attribution as attribution
 from monad_execbench_capture.cli import detect_monad_commit
 expected = json.loads(sys.argv[1])
 assert metadata.version('monad-execbench-capture') == expected['version']
-assert capture.__version__ == report.__version__ == expected['version']
+assert capture.__version__ == report.__version__ == attribution.__version__ == expected['version']
 assert detect_monad_commit() == expected['monad_commit']
 schema = files('monad_execbench_capture').joinpath('schema/calls-v1.json')
 assert json.loads(schema.read_text())['properties']['schema']['const'] == 'monad-execbench/calls-v1'
-for package in (capture, report):
+for package in (capture, report, attribution):
     assert Path(package.__file__).resolve().is_relative_to(Path(sys.prefix).resolve())
 print('isolated package versions, resources, and dependency pin verified')
 """
@@ -47,13 +48,17 @@ def verify_install(wheel: Path, directory: Path, release: dict) -> None:
     python = directory / "venv/bin/python"
     run([python, "-m", "pip", "install", wheel], cwd=directory)
     run([python, "-I", "-c", SMOKE, json.dumps(release)], cwd=directory)
-    for name in ("monad-execbench-capture", "monad-execbench-report"):
+    for name in (
+        "monad-execbench-capture",
+        "monad-execbench-report",
+        "monad-execbench-attribute",
+    ):
         executable = directory / "venv/bin" / name
         run([executable, "--version"], cwd=directory)
         run([executable, "--help"], cwd=directory)
     # Tests live in the checkout, but installed packages must come from the
     # isolated venv: no editable installs or source-package PYTHONPATH.
-    for suite in ("capture", "report"):
+    for suite in ("capture", "report", "attribution"):
         run(
             [
                 python,

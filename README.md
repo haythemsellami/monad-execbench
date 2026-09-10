@@ -3,8 +3,9 @@
 `monad-execbench` is a contract-agnostic tool for replaying and benchmarking arbitrary EVM calls with the production Monad C++ execution engine.
 
 The project is preparing its first pre-1.0 release. Capture, verified offline
-replay, warmed direct-VM timing, and Markdown reports are implemented. Profiling
-and extended benchmark modes remain planned. See the [support and release
+replay, warmed direct-VM timing, Markdown reports, and isolated interpreter
+gas/opcode attribution to Solidity are implemented. Hardware profiling and
+extended benchmark modes remain planned. See the [support and release
 policy](docs/releases.md) and [project specification](docs/spec.md).
 
 ## Architecture
@@ -16,6 +17,11 @@ The tool is split into three layers:
 3. The C++ runner executes fixtures through the production Monad VM and measures their performance.
 
 No contract address, ABI, selector, or workload is compiled into the runner.
+
+For source-level analysis, a separate diagnostic build records interpreter
+frames, PCs, opcode counts, and gas; the offline mapper joins them with Foundry
+build-info. See [Solidity attribution](docs/attribution.md). These diagnostics
+do not instrument timing runs and do not claim per-source CPU timing.
 
 ## Dependencies
 

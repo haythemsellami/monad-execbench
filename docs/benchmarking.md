@@ -96,6 +96,10 @@ native code remain cached according to the selected hot mode. Fixture loading,
 base-state construction, cache priming, state reset, correctness checks, and
 JSON serialization are excluded from reported times.
 
+For interpreter-frame, opcode, and Solidity gas attribution, use the
+[separate diagnostic build](attribution.md) with the same fixture. Its gas/count
+reports complement these timings; they are not per-source CPU measurements.
+
 ## Results
 
 The JSON file contains every raw repetition plus Google Benchmark aggregates.
