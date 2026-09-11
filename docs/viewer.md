@@ -53,18 +53,38 @@ mode. Supply timing inputs covering every case in each supplied profile.
 
 ## Explore
 
-- **Overview:** choose a run and filter names, labels or counters. Review gas,
-  wall/process-CPU medians, variability, repetitions and recorded provenance.
-- **Workload scaling:** choose any exported numeric counter, timing/gas metric,
-  and optional grouping label. Points are descriptive; no scaling law or
-  statistical significance is inferred. Counter values remain exact strings;
-  plotting uses relative positions, not rounded integers as case identifiers.
-- **Comparisons:** ratios from the supplied manifest, using the same validation
-  and statistics as Markdown reports. Incompatible cross-mode, cross-fixture,
-  cross-build or cross-host pairs are rejected during export.
-- **Case explorer:** distributions and metadata, an expandable VM-frame tree,
-  self/inclusive gas, opcode totals, and lazy per-frame bytecode positions.
-  Select a mapped position or hotspot for its supplied source snippet.
+The page is a single local document with five hash-routed views. The left rail
+lists the views with their counts and the timing runs as radios; switching the
+run resets the selected case and frame. The header shows the run's mode,
+environment, pinned block and caution count, and "Export summary" downloads the
+loaded `summary.json` (it is not a reproducibility bundle). When the exporter
+retained quality warnings they appear beneath the header as measurement
+cautions: heuristics, not errors, and the data stays viewable.
+
+- **Results overview:** ranges (never totals) of gas, CPU median and CPU CV
+  across the run's independent cases; search over names, labels and counters;
+  single-select label chips; a sortable case table. Status is shown as text
+  plus a glyph; an expected root revert is a valid result, not a failure.
+- **Workload scaling:** any exported numeric counter against CPU median, wall
+  median or gas, optionally split into series by a string label. Counter values
+  stay exact decimal strings; points are connected in counter order for reading
+  only and no scaling law is fitted or implied. Runs without counters show an
+  empty state, not an error.
+- **Comparisons:** one card per manifest entry with baseline and candidate
+  identities, exact values, the candidate ÷ baseline ratio as a bar with a
+  1.00× marker, and the percentage change. Pairings are never inferred.
+- **Case explorer:** whole-call metrics, distribution summaries and workload
+  metadata for the selected case, followed by the diagnostic evidence when a
+  profile is attached: totals, source coverage over whole-call gas (with the
+  outside-VM remainder as its own segment), the interpreter-frame tree as a gas
+  icicle or a tree table, opcode totals, the selected frame's aggregated PC rows
+  (paginated, loaded lazily) and ranked source-span hotspots with the supplied
+  snippet. Timing-only exports, cases without a compatible profile, zero-frame
+  precompile calls and unmatched artifacts each have an explicit state.
+- **Provenance & methodology:** run identity and build, fixture and
+  environment, the benchmark host as recorded, diagnostic inputs, every quality
+  warning with an active/clear tag, and the methodology notes. Long values are
+  truncated on screen; the copy control copies the full value.
 
 Each raw repetition is already an average over calibrated executions. Aggregate
 rows are not extra observations. Gas is gross direct-call gas before refunds,
@@ -76,6 +96,24 @@ There is no per-opcode or per-Solidity CPU timing, chronological opcode replay,
 full-transaction latency, or node-throughput view. Source gas must not be used
 to apportion whole-call CPU time. Missing source remains unmapped; optimized
 source ranges and function labels are compiler hints, not invocation counts.
+Integers past `2^53 - 1` are decimal strings and are shown, sorted and copied
+exactly; `null` statistics read "unavailable", never zero.
+
+## Frontend
+
+The frontend is plain HTML, CSS and vanilla ES modules under
+`analysis/monad_execbench_viewer/static/` with no build step: `index.html`,
+`style.css`, `app.js` (bootstrap, routing, lazy requests), `dom.js`,
+`format.js`, `state.js` and one module per view under `views/`. The stylesheet
+carries the design tokens as custom properties and the Barlow and Barlow
+Condensed faces are vendored as local WOFF2 files under `static/fonts/` with
+their SIL Open Font License; nothing is fetched from the network. Only
+`summary.json` is requested on load; `p{N}-c{M}.json` is fetched when a case is
+selected and `p{N}-c{M}/frame-{K}.json` when a frame is selected. All imported
+text is bound as text, never as markup, and the page runs under the server's
+content-security policy with no inline script, inline handlers, `eval`, workers
+or remote resources. The server reads the packaged assets once at start-up and
+serves only that allowlist plus the export's narrowly named JSON files.
 
 ## Export format and validation
 
@@ -128,6 +166,10 @@ python tests/packaging/check_distributions.py
 ```
 
 CI checks the viewer on the existing Python/Linux/macOS matrix and verifies
-that the HTML, CSS and JavaScript assets survive wheel and sdist installation.
-JavaScript syntax can additionally be checked by maintainers with
-`node --check analysis/monad_execbench_viewer/static/app.js`.
+that the HTML, CSS, JavaScript modules and font files survive wheel and sdist
+installation and are served from the installed package. `tests/viewer` also
+asserts the gas accounting identities against a real export, round-trips
+hostile case names, exports and serves a representative large dataset, and
+checks that no asset references a remote URL. When a `node` executable is
+available the modules are syntax-checked and the exact-value formatting rules
+are exercised; Node is never required to serve or view results.

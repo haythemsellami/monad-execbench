@@ -222,6 +222,8 @@ class ViewerTest(unittest.TestCase):
         self.assertNotIn("innerHTML", script)
         self.assertNotIn("https://", script)
         self.assertTrue(assets.joinpath("style.css").read_text())
+        self.assertTrue(assets.joinpath("fonts/barlow-400.woff2").is_file())
+        self.assertTrue(assets.joinpath("views/explorer.js").is_file())
 
     def test_server_is_loopback_read_only_and_confines_files(self):
         self.prepare()
@@ -244,7 +246,14 @@ class ViewerTest(unittest.TestCase):
                     client.close()
                     return result
 
-                for path in ("/", "/app.js", "/style.css", "/summary.json"):
+                for path in (
+                    "/",
+                    "/app.js",
+                    "/style.css",
+                    "/views/overview.js",
+                    "/fonts/barlow-400.woff2",
+                    "/summary.json",
+                ):
                     status, headers, _ = request(path)
                     self.assertEqual(status, 200)
                     self.assertIn(
@@ -256,6 +265,8 @@ class ViewerTest(unittest.TestCase):
                     "/%2e%2e/private.json",
                     "/p0-c0.json",
                     "/unknown",
+                    "/fonts/OFL.txt",
+                    "/fonts/../app.js",
                 ):
                     self.assertEqual(request(path)[0], 404)
                 self.assertEqual(

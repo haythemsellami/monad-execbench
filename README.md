@@ -135,7 +135,9 @@ monad-execbench-viewer serve results/viewer
 
 It retains quality warnings and comparison safeguards, and loads diagnostic
 details per case/frame instead of sending the entire trace to the browser.
-See [the viewer guide](docs/viewer.md) for comparisons, inputs and limitations.
+The page is plain HTML, CSS and ES modules with vendored fonts, so it works
+offline from the installed package. See [the viewer guide](docs/viewer.md) for
+the five views, comparisons, inputs and limitations.
 
 ## Capture utility
 

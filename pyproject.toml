@@ -31,4 +31,4 @@ monad_execbench_viewer = "analysis/monad_execbench_viewer"
 
 [tool.setuptools.package-data]
 monad_execbench_capture = ["pinned-monad.txt", "schema/*.json"]
-monad_execbench_viewer = ["static/*.html", "static/*.css", "static/*.js"]
+monad_execbench_viewer = ["static/*.html", "static/*.css", "static/*.js", "static/views/*.js", "static/fonts/*.woff2", "static/fonts/OFL.txt"]

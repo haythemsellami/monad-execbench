@@ -31,8 +31,12 @@ schema = files('monad_execbench_capture').joinpath('schema/calls-v1.json')
 assert json.loads(schema.read_text())['properties']['schema']['const'] == 'monad-execbench/calls-v1'
 for package in (capture, report, attribution, viewer):
     assert Path(package.__file__).resolve().is_relative_to(Path(sys.prefix).resolve())
-for name in ('index.html', 'app.js', 'style.css'):
+for name in ('index.html', 'app.js', 'dom.js', 'format.js', 'state.js', 'style.css', 'views/overview.js', 'views/scaling.js', 'views/comparisons.js', 'views/explorer.js', 'views/provenance.js', 'fonts/OFL.txt'):
     assert files('monad_execbench_viewer').joinpath('static', name).read_text()
+for name in ('barlow-400.woff2', 'barlow-500.woff2', 'barlow-600.woff2', 'barlow-condensed-500.woff2', 'barlow-condensed-600.woff2'):
+    assert files('monad_execbench_viewer').joinpath('static', 'fonts', name).read_bytes()[:4] == b'wOF2'
+from monad_execbench_viewer.server import packaged_assets
+assert len(packaged_assets()) == 16
 print('isolated package versions, resources, and dependency pin verified')
 """
 
