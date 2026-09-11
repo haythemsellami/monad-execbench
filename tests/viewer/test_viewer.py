@@ -12,11 +12,13 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from importlib.resources import files
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 from monad_execbench_attribution.report import attribute
 from monad_execbench_attribution.sources import load_build_info
 from monad_execbench_viewer.cli import main
-from monad_execbench_viewer.export import SCHEMA, export
+from monad_execbench_viewer.export import SCHEMA, export, write_json
 from monad_execbench_viewer.profiles import IDENTITY, checked_profile
 from monad_execbench_viewer.server import create_server
 
@@ -94,6 +96,98 @@ class ViewerTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             export([f"run={self.input}"], [], None, self.input)
 
+    def test_publication_moves_one_complete_directory(self):
+        path = self.write("profile.json", self.diagnostic())
+        rename = Path.rename
+
+        def publish(staged, target):
+            self.assertTrue(staged.is_dir())
+            self.assertEqual(target, self.output)
+            self.assertEqual(list(target.iterdir()), [])
+            self.assertTrue((staged / "summary.json").is_file())
+            self.assertTrue((staged / "p0-c0.json").is_file())
+            self.assertTrue((staged / "p0-c0/frame-0.json").is_file())
+            return rename(staged, target)
+
+        with patch.object(Path, "rename", autospec=True, side_effect=publish) as move:
+            self.prepare(profiles=[path])
+        self.assertEqual(move.call_count, 1)
+        self.assertEqual(list(self.root.glob(".viewer-*")), [])
+        self.assertTrue((self.output / "p0-c0/frame-0.json").is_file())
+
+    def test_publication_failure_cleans_reservation_and_allows_retry(self):
+        path = self.write("profile.json", self.diagnostic())
+        for exception in (OSError("publication failed"), KeyboardInterrupt()):
+            with self.subTest(exception=type(exception).__name__):
+                with (
+                    patch.object(Path, "rename", side_effect=exception),
+                    self.assertRaises(type(exception)),
+                ):
+                    self.prepare(profiles=[path])
+                self.assertFalse(self.output.exists())
+                self.assertEqual(list(self.root.glob(".viewer-*")), [])
+        self.prepare(profiles=[path])
+        self.assertTrue((self.output / "summary.json").is_file())
+
+    def test_staging_failure_never_reserves_output(self):
+        with (
+            patch(
+                "monad_execbench_viewer.export.write_json", side_effect=OSError("write")
+            ),
+            self.assertRaises(OSError),
+        ):
+            self.prepare()
+        self.assertFalse(self.output.exists())
+        self.assertEqual(list(self.root.glob(".viewer-*")), [])
+
+    def test_publication_preserves_destination_created_during_staging(self):
+        for kind in ("empty-directory", "directory", "file", "symlink"):
+            with self.subTest(kind=kind):
+                output = self.root / kind
+                identity = []
+
+                def write_and_collide(
+                    path, value, kind=kind, output=output, identity=identity
+                ):
+                    write_json(path, value)
+                    if kind in ("empty-directory", "directory"):
+                        output.mkdir()
+                        if kind == "directory":
+                            (output / "unrelated").write_text("keep")
+                    elif kind == "file":
+                        output.write_text("keep")
+                    else:
+                        output.symlink_to(self.root / "absent")
+                    identity.append(output.lstat().st_ino)
+
+                with (
+                    patch(
+                        "monad_execbench_viewer.export.write_json",
+                        side_effect=write_and_collide,
+                    ),
+                    self.assertRaises(FileExistsError),
+                ):
+                    export([f"run={self.input}"], [], None, output)
+                self.assertEqual(output.lstat().st_ino, identity[0])
+                if kind == "directory":
+                    self.assertEqual((output / "unrelated").read_text(), "keep")
+                elif kind == "file":
+                    self.assertEqual(output.read_text(), "keep")
+                self.assertEqual(list(self.root.glob(".viewer-*")), [])
+
+    def test_publication_failure_does_not_remove_another_writers_files(self):
+        def fail_after_other_write(*args):
+            (self.output / "unrelated").write_text("keep")
+            raise OSError("publication failed")
+
+        with (
+            patch.object(Path, "rename", side_effect=fail_after_other_write),
+            self.assertRaisesRegex(OSError, "publication failed"),
+        ):
+            self.prepare()
+        self.assertEqual((self.output / "unrelated").read_text(), "keep")
+        self.assertEqual(list(self.root.glob(".viewer-*")), [])
+
     def test_duplicate_alias_files_invalid_and_missing_repetitions(self):
         for inputs in (
             [f"run={self.input}", f"run={self.input}"],
@@ -155,6 +249,22 @@ class ViewerTest(unittest.TestCase):
             hashlib.sha256(path.read_bytes()).hexdigest(),
         )
 
+    def test_profile_provenance_is_projected_without_losing_build_identity(self):
+        data = self.attribution()
+        expected = copy.deepcopy(data["build_info"])
+        data["build_info"][0]["input"] = {"sources": "not browser provenance"}
+        data["build_info"][0]["output"] = {"bytecode": "not browser provenance"}
+        data["unexpected"] = {"payload": "not browser provenance"}
+        data["version"] = "0.1.0"
+        result = self.prepare(profiles=[self.write("attribution.json", data)])
+        provenance = result["profiles"][0]
+        self.assertEqual(provenance["build_info"], expected)
+        self.assertEqual(provenance["version"], "0.1.0")
+        self.assertNotIn("unexpected", provenance)
+        self.assertNotIn("not browser provenance", json.dumps(provenance))
+        for field in ("runner_sha256", "runner_commit", "compiler", "build_type"):
+            self.assertEqual(provenance[field], data[field])
+
     def test_profile_identity_and_result_mismatch_rejected(self):
         for mutate in (
             lambda d: d.update(bundle_sha256="0x" + "f" * 64),
@@ -212,6 +322,110 @@ class ViewerTest(unittest.TestCase):
                 1,
             )
         self.assertFalse(self.output.exists())
+
+    def assert_profile_cli_error(self, data):
+        path = self.write("malformed-profile.json", data)
+        before = path.read_bytes()
+        stderr = io.StringIO()
+        with redirect_stderr(stderr), redirect_stdout(io.StringIO()):
+            result = main(
+                [
+                    "export",
+                    "--input",
+                    f"run={self.input}",
+                    "--profile",
+                    str(path),
+                    "--output",
+                    str(self.output),
+                ]
+            )
+        self.assertEqual(result, 1)
+        self.assertTrue(stderr.getvalue().startswith("viewer: "))
+        self.assertNotIn("Traceback", stderr.getvalue())
+        self.assertFalse(self.output.exists())
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(list(self.root.glob(".viewer-*")), [])
+
+    def test_malformed_profile_shapes_return_clean_cli_errors(self):
+        mutations = (
+            lambda d: d.update(cases=None),
+            lambda d: d.update(cases={}),
+            lambda d: d.update(cases=[None]),
+            lambda d: d.update(cases=["bad"]),
+            lambda d: d["cases"][0].update(codes=None),
+            lambda d: d["cases"][0].update(frames=None),
+            lambda d: d["cases"][0].update(frames=[None]),
+            lambda d: d["cases"][0]["frames"][0].update(pcs=None),
+            lambda d: d["cases"][0]["frames"][0].update(pcs=[None]),
+            lambda d: d["cases"][0].update(coverage={"solidity": None}),
+        )
+        for index, mutate in enumerate(mutations):
+            with self.subTest(index=index):
+                data = self.attribution()
+                mutate(data)
+                self.assert_profile_cli_error(data)
+
+    def test_invalid_build_provenance_returns_clean_cli_errors(self):
+        invalid = (
+            None,
+            {},
+            [None],
+            [{}],
+            [{"file": "build.json", "compiler": "solc", "sha256": "bad"}],
+            [{"file": None, "compiler": "solc", "sha256": "a" * 64}],
+            [{"file": "build.json", "compiler": {}, "sha256": "a" * 64}],
+        )
+        for value in invalid:
+            with self.subTest(value=value):
+                data = self.attribution()
+                data["build_info"] = value
+                self.assert_profile_cli_error(data)
+
+    def test_default_port_headers_without_binding_privileged_port(self):
+        self.prepare()
+        with patch("monad_execbench_viewer.server.ThreadingHTTPServer") as factory:
+            create_server(self.output, 80)
+        handler = factory.call_args.args[1]
+        checks = (
+            (80, "127.0.0.1", None, 200),
+            (80, "127.0.0.1:80", None, 200),
+            (80, "127.0.0.1", "http://127.0.0.1", 200),
+            (80, "127.0.0.1", "http://127.0.0.1:80", 200),
+            (80, "127.0.0.1:80", "http://127.0.0.1", 200),
+            (80, "127.0.0.1:80", "http://127.0.0.1:80", 200),
+            (80, "127.0.0.1:81", None, 403),
+            (80, "localhost", None, 403),
+            (80, "attacker.example", None, 403),
+            (80, "127.0.0.1", "https://127.0.0.1", 403),
+            (80, "127.0.0.1", "http://127.0.0.1:81", 403),
+            (80, "127.0.0.1", "https://attacker.example", 403),
+            (8765, "127.0.0.1:8765", "http://127.0.0.1:8765", 200),
+            (8765, "127.0.0.1", None, 403),
+            (8765, "127.0.0.1:80", None, 403),
+            (8765, "127.0.0.1:8765", "http://127.0.0.1", 403),
+        )
+        for port, host, origin, expected in checks:
+            with self.subTest(port=port, host=host, origin=origin):
+                request = SimpleNamespace(
+                    server=SimpleNamespace(server_port=port),
+                    headers={"Host": host, "Origin": origin},
+                    path="/summary.json",
+                    send_error=Mock(),
+                    send_response=Mock(),
+                    send_header=Mock(),
+                    end_headers=Mock(),
+                    wfile=io.BytesIO(),
+                )
+                handler.do_GET(request)
+                if expected == 200:
+                    request.send_response.assert_called_once_with(200)
+                    request.send_error.assert_not_called()
+                    self.assertEqual(
+                        json.loads(request.wfile.getvalue())["schema"], SCHEMA
+                    )
+                else:
+                    request.send_error.assert_called_once_with(403)
+                    request.send_response.assert_not_called()
 
     def test_static_resources_are_packaged_without_remote_dependencies(self):
         assets = files("monad_execbench_viewer").joinpath("static")

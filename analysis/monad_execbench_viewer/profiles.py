@@ -21,6 +21,7 @@ IDENTITY = {
     "compiler": "compiler",
     "build_type": "build_type",
 }
+PROVENANCE_FIELDS = (*IDENTITY, "version", "mode", "runner_sha256")
 FRAME_FIELDS = (
     "id",
     "parent",
@@ -80,6 +81,25 @@ def source_location(source) -> dict | None:
     }
 
 
+def build_provenance(value) -> list[dict]:
+    require(isinstance(value, list), "build_info must be an array")
+    result = []
+    for build in value:
+        require(isinstance(build, dict), "build_info entry must be an object")
+        for field in ("file", "compiler"):
+            require(
+                isinstance(build.get(field), str) and bool(build[field].strip()),
+                f"invalid build_info {field}",
+            )
+        require(
+            isinstance(build.get("sha256"), str)
+            and re.fullmatch(r"[0-9a-f]{64}", build["sha256"]),
+            "invalid build_info sha256",
+        )
+        result.append({field: build[field] for field in ("file", "sha256", "compiler")})
+    return result
+
+
 def checked_profile(path: Path) -> dict:
     raw = bounded_file(path).read_bytes()
     original = parse_json(raw)
@@ -89,15 +109,24 @@ def checked_profile(path: Path) -> dict:
         mapped or original.get("schema") == "monad-execbench/diagnostics-v1",
         "unsupported profile schema",
     )
-    native = {
-        key: value for key, value in original.items() if key not in ("cases", "schema")
-    }
+    builds = build_provenance(original.get("build_info", []))
+    require(isinstance(original.get("cases"), list), "cases must be an array")
+    native = {key: original[key] for key in PROVENANCE_FIELDS if key in original}
+    for field in ("version", "compiler", "build_type"):
+        if field in native:
+            require(
+                isinstance(native[field], str) and bool(native[field].strip()),
+                f"invalid profile {field}",
+            )
     native["schema"] = "monad-execbench/diagnostics-v1"
     native["cases"] = []
     for case in original["cases"]:
+        require(isinstance(case, dict), "case must be an object")
         require(case.get("status") in ("success", "revert"), "invalid root status")
+        require(isinstance(case.get("codes"), dict), "codes must be an object")
         frames = case["frames"]
         require(isinstance(frames, list), "frames must be an array")
+        require(all(isinstance(f, dict) for f in frames), "frame must be an object")
         require(
             not frames or (frames[0]["parent"] is None and frames[0]["depth"] == 0),
             "invalid root frame",
@@ -107,6 +136,11 @@ def checked_profile(path: Path) -> dict:
         )
         native_frames = []
         for frame in frames:
+            require(isinstance(frame.get("pcs"), list), "pcs must be an array")
+            require(
+                all(isinstance(pc, dict) for pc in frame["pcs"]),
+                "PC entry must be an object",
+            )
             for field in ("sender", "recipient"):
                 require(
                     isinstance(frame.get(field), str)
@@ -209,6 +243,7 @@ def checked_profile(path: Path) -> dict:
                 native_frame["steps"] = sum(pc["count"] for pc in frame["pcs"])
             require(isinstance(case.get("coverage"), dict), "missing source coverage")
             for counters in case["coverage"].values():
+                require(isinstance(counters, dict), "coverage entry must be an object")
                 for value in counters.values():
                     integer(value, "coverage counter")
             require(
@@ -217,7 +252,7 @@ def checked_profile(path: Path) -> dict:
             validated["coverage"] = coverage
     checked["input_sha256"] = hashlib.sha256(raw).hexdigest()
     checked["input_schema"] = original["schema"]
-    checked["build_info"] = original.get("build_info", [])
+    checked["build_info"] = builds
     return checked
 
 

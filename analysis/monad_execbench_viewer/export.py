@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import math
 import re
-import shutil
 import tempfile
 from dataclasses import asdict
 from pathlib import Path
@@ -124,17 +123,23 @@ def export(
         )
     output = output.absolute()
     output.parent.mkdir(parents=True, exist_ok=True)
-    temporary = Path(tempfile.mkdtemp(prefix=".viewer-", dir=output.parent))
-    try:
+    with tempfile.TemporaryDirectory(prefix=".viewer-", dir=output.parent) as staging:
+        temporary = Path(staging)
         if profiles:
             from .profiles import add_profiles
 
             add_profiles(summary, profiles, temporary)
         write_json(temporary / "summary.json", summary)
-        # mkdir is exclusive; never replace another export or an input directory.
+        # Reserve the name exclusively, then replace only our empty reservation
+        # with the complete dataset in one same-filesystem directory rename.
         output.mkdir()
-        for path in temporary.iterdir():
-            path.rename(output / path.name)
-    finally:
-        shutil.rmtree(temporary)
+        try:
+            temporary.rename(output)
+        except BaseException:
+            try:
+                output.rmdir()
+            except OSError:
+                # Never recursively remove an output modified by another writer.
+                pass
+            raise
     return summary

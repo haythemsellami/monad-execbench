@@ -29,6 +29,9 @@ ephemeral port; `--port 8765` requests a specific one. The server runs until
 Ctrl-C. It cannot bind to a public interface and does not automatically open a
 browser. Do not expose it through a public proxy.
 
+When explicitly serving on port 80, both the omitted and explicit `:80`
+Host/Origin forms are accepted. Other ports must match the bound port exactly.
+
 Use at least one `--input NAME=FILE`. Names follow the generic report command's
 alias rules. Repeat inputs to display multiple modes/runs separately. The
 `--comparisons` manifest is optional and uses the existing
@@ -84,6 +87,13 @@ dataset. Export refuses an existing output and preserves original inputs. Input
 files are capped at 512 MiB each; importing large JSON may still require
 substantial transient memory. Export happens once, outside the HTTP server.
 
+The complete dataset is staged beside the destination, then published with one
+directory rename after exclusively reserving the output name. Publication errors
+clean up the empty reservation and staged data so the same output can be retried.
+If another writer modifies the reserved directory, cleanup preserves its contents
+rather than recursively deleting them. This is not a crash-durability guarantee;
+an uncatchable process termination can leave staging or an empty reservation.
+
 ```text
 viewer/
   summary.json              # run/case statistics, comparisons and provenance
@@ -107,6 +117,11 @@ against compiler output**: run `monad-execbench-attribute` with matching
 build-info to regenerate them. Input SHA-256 digests and supplied provenance
 remain visible. Consistency checks do not certify input authenticity or replay
 contracts; retain the original fixture/results for independent verification.
+
+Profile provenance is restricted to known fields. Build-info provenance retains
+only each file's name, SHA-256 digest and compiler identity; additional imported
+payloads are not copied into the summary. Malformed profile object/array shapes
+and invalid build provenance are reported as CLI validation errors.
 
 The server exposes only its packaged assets and narrowly named export JSON
 files, rejects paths escaping the dataset, checks Host/Origin, disables CORS,

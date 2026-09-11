@@ -23,10 +23,13 @@ def create_server(directory: Path, port: int = 0) -> ThreadingHTTPServer:
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
-            host = f"127.0.0.1:{self.server.server_port}"
-            if self.headers.get("Host") != host or self.headers.get("Origin") not in (
-                None,
-                f"http://{host}",
+            hosts = {f"127.0.0.1:{self.server.server_port}"}
+            if self.server.server_port == 80:
+                hosts.add("127.0.0.1")
+            origins = {None, *(f"http://{host}" for host in hosts)}
+            if (
+                self.headers.get("Host") not in hosts
+                or self.headers.get("Origin") not in origins
             ):
                 self.send_error(403)
                 return

@@ -58,6 +58,7 @@ def main(argv: list[str] | None = None) -> int:
         ValueError,
         KeyError,
         TypeError,
+        AttributeError,
         OverflowError,
         RecursionError,
     ) as error:
