@@ -35,6 +35,7 @@ class ReleaseTest(unittest.TestCase):
             "capture/monad_execbench_capture/pinned-monad.txt",
             "analysis/monad_execbench_report/__init__.py",
             "analysis/monad_execbench_attribution/__init__.py",
+            "analysis/monad_execbench_viewer/__init__.py",
         ):
             target = self.root / name
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -66,6 +67,7 @@ class ReleaseTest(unittest.TestCase):
             "capture/monad_execbench_capture/__init__.py",
             "analysis/monad_execbench_report/__init__.py",
             "analysis/monad_execbench_attribution/__init__.py",
+            "analysis/monad_execbench_viewer/__init__.py",
         ):
             with self.subTest(name=name):
                 path = self.root / name

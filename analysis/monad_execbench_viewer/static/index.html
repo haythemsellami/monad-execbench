@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      name="description"
+      content="Explore saved Monad execution benchmark timings, gas and source attribution locally."
+    />
+    <title>Execution bench · Local results</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <aside class="rail">
+      <a href="#overview" class="brand"
+        >EXEC<br />BENCH<span>RESULTS EXPLORER</span></a
+      >
+      <nav aria-label="Sections">
+        <a href="#overview">Overview</a><a href="#comparisons">Comparisons</a
+        ><a href="#explorer">Case explorer</a>
+      </nav>
+      <p>LOCAL / READ ONLY<br />No RPC or execution</p>
+    </aside>
+    <main>
+      <header id="overview">
+        <div>
+          <p class="eyebrow">MONAD EXECUTION ENGINE</p>
+          <h1>Execution results</h1>
+        </div>
+        <a class="download" href="/summary.json" download>Export summary ↓</a>
+      </header>
+      <p class="scope">
+        Warmed direct-VM measurements. CPU time is for a complete call; source
+        and opcode attribution measures gas, not time.
+      </p>
+      <div id="error" role="alert" hidden></div>
+      <section class="toolbar" aria-label="Result filters">
+        <label>Run<select id="run"></select></label
+        ><label class="search"
+          >Find a case<input
+            id="search"
+            type="search"
+            placeholder="Name, label or counter…"
+        /></label>
+      </section>
+      <div id="metrics" class="metrics" aria-live="polite"></div>
+      <details id="quality">
+        <summary>Measurement quality</summary>
+        <ul id="warnings"></ul>
+        <p>
+          Low variability is not proof of isolated hardware. Read host and build
+          provenance before comparing results.
+        </p>
+      </details>
+      <section class="panel">
+        <div class="section-head">
+          <h2>Cases</h2>
+          <span>Median per execution · µs</span>
+        </div>
+        <div class="table-scroll">
+          <table id="cases">
+            <thead>
+              <tr>
+                <th>Case</th>
+                <th>Status</th>
+                <th>Execution gas</th>
+                <th>CPU µs</th>
+                <th>Wall µs</th>
+                <th>CPU CV</th>
+                <th>Repetitions</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p id="empty" hidden>No cases match these filters.</p>
+      </section>
+      <section id="counter-chart" class="panel" hidden></section>
+      <section id="comparisons" class="panel">
+        <h2>Implementation comparisons</h2>
+        <p id="comparison-empty">
+          No comparison manifest supplied. Comparisons must be explicit and
+          compatible.
+        </p>
+        <div id="comparison-table" class="table-scroll"></div>
+      </section>
+      <section id="explorer" class="panel">
+        <h2>Case explorer</h2>
+        <p id="case-prompt">
+          Select a case to inspect its timing distribution and diagnostic
+          evidence.
+        </p>
+        <div id="case-detail"></div>
+      </section>
+      <details class="panel">
+        <summary>Run provenance</summary>
+        <dl id="provenance"></dl>
+      </details>
+      <footer>
+        Results describe the captured workload on its recorded host—not
+        full-node throughput. Imported data is evidence, not an authenticity
+        certificate.
+      </footer>
+    </main>
+  </body>
+</html>
